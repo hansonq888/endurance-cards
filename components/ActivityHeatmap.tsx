@@ -69,8 +69,11 @@ export function ActivityHeatmap({
   tier,
   years,
   recent,
+  routesEnabled = true,
 }: {
   slug: string;
+  /** False when the owner hides routes from visitors: days aren't clickable. */
+  routesEnabled?: boolean;
   /** Tints the holographic route panel to the card's tier. */
   tier: CardTier;
   /** Past calendar years that can be loaded, newest first. */
@@ -321,8 +324,8 @@ export function ActivityHeatmap({
                   <g
                     key={d.key}
                     onMouseEnter={() => setHover({ kind: "day", day: d })}
-                    onClick={() => d.minutes > 0 && setPicked(picked === d ? null : d)}
-                    className={d.minutes > 0 ? "cursor-pointer" : undefined}
+                    onClick={() => routesEnabled && d.minutes > 0 && setPicked(picked === d ? null : d)}
+                    className={routesEnabled && d.minutes > 0 ? "cursor-pointer" : undefined}
                   >
                     <rect
                       x={x}
@@ -379,7 +382,7 @@ export function ActivityHeatmap({
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted">
         <p aria-live="polite" className="min-h-4">
-          {caption ?? (view === "grid" ? "Hover a day for details · click to see its route" : "Hover a week for details")}
+          {caption ?? (view === "grid" ? `Hover a day for details${routesEnabled ? " · click to see its route" : ""}` : "Hover a week for details")}
         </p>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">

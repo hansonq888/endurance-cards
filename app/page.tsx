@@ -86,7 +86,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             Connect with Strava
           </a>
           <p className="mt-3 flex items-center gap-2 text-xs text-muted">
-            <ShieldCheck className="h-4 w-4" aria-hidden /> Read-only access. Remove your card and revoke access any time.
+            <ShieldCheck className="h-4 w-4" aria-hidden /> Read-only access. Cards start link-only; remove yours any time.{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+              Privacy
+            </Link>
           </p>
         </div>
 
@@ -112,7 +115,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </p>
       </section>
 
-      <footer className="mt-16 text-center text-xs text-muted">Powered by Strava · Not affiliated with EA Sports or Strava</footer>
+      <footer className="mt-16 flex justify-center gap-4 text-xs text-muted">
+        <span>Powered by Strava · Not affiliated with EA Sports or Strava</span>
+        <Link href="/privacy" className="hover:text-foreground">
+          Privacy
+        </Link>
+      </footer>
     </main>
   );
 }

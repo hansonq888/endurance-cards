@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveViewer } from "./access";
 import { dailySeries, routesByDay } from "./engine";
 import { AppError, NotFoundError, StravaAuthError } from "./errors";
 import {
@@ -8,7 +9,6 @@ import {
   getTokens,
   getYearCalendar,
   releaseCalendarLock,
-  resolveSlug,
   saveRoutes,
   saveYearCalendar,
 } from "./redis";
@@ -42,9 +42,10 @@ export class CalendarBusyError extends AppError {
  * fetched from Strava once (1–10 API calls) and cached permanently, since a
  * finished year never changes.
  */
-export async function getCalendarYear(slug: string, year: number): Promise<YearCalendar> {
-  const athleteId = await resolveSlug(slug);
-  if (athleteId === null) throw new NotFoundError(`No scouted player named "${slug}"`);
+export async function getCalendarYear(slug: string, year: number, sessionAthleteId: number | null): Promise<YearCalendar> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
+  if (!viewer.isOwner && !viewer.settings.showCalendar) throw new NotFoundError("This athlete keeps their calendar private");
+  const { athleteId } = viewer;
   const card = await getCachedCard(athleteId);
   if (!card || !calendarYears(card).includes(year)) throw new NotFoundError(`No ${year} calendar for this athlete`);
 
@@ -76,9 +77,12 @@ export async function getCalendarYear(slug: string, year: number): Promise<YearC
  * Route shapes for one local date. Looks in the rolling window first, then in
  * that year's bucket (present once the year has been opened in the calendar).
  */
-export async function getRoutesForDay(slug: string, date: string): Promise<RouteShape[]> {
-  const athleteId = await resolveSlug(slug);
-  if (athleteId === null) throw new NotFoundError(`No scouted player named "${slug}"`);
+export async function getRoutesForDay(slug: string, date: string, sessionAthleteId: number | null): Promise<RouteShape[]> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
+  if (!viewer.isOwner && !(viewer.settings.showCalendar && viewer.settings.showRoutes)) {
+    throw new NotFoundError("This athlete keeps their routes private");
+  }
+  const { athleteId } = viewer;
   const recent = await getRoutes(athleteId, "recent");
   if (recent?.[date]) return recent[date];
   const year = await getRoutes(athleteId, Number(date.slice(0, 4)));

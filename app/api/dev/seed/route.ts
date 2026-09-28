@@ -1,7 +1,8 @@
 import { calendarYears } from "@/lib/calendar";
 import { buildCard, dailySeries, routesByDay } from "@/lib/engine";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
-import { saveCard, saveRoutes, saveYearCalendar } from "@/lib/redis";
+import { defaultSettings } from "@/lib/access";
+import { saveCard, saveRoutes, saveSettings, saveYearCalendar } from "@/lib/redis";
 
 /**
  * Development only: seeds the cache with synthetic athletes so the profile
@@ -25,6 +26,8 @@ export async function GET() {
       }));
       const card = { ...built, history: [...history, ...built.history] };
       await saveCard(card);
+      // Demo athletes are public so the pages work without signing in.
+      await saveSettings(card.athleteId, { ...defaultSettings(), visibility: "public" });
       await saveRoutes(card.athleteId, "recent", routesByDay(raw.activities));
       // Fake past calendar years too (real athletes fetch these from Strava on demand).
       for (const year of calendarYears(card, now)) {

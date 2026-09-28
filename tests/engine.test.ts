@@ -3,6 +3,7 @@ import { buildCard, displayNameFor, routesByDay, withHistory, RATING_HISTORY_MAX
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { decodePolyline, encodePolyline, routeShape } from "@/lib/polyline";
 import { levelFor, TROPHIES, trophyProgress } from "@/lib/trophies";
+import { canView } from "@/lib/visibility";
 import { ATTRIBUTE_KEYS, type ScoutInputs } from "@/types/player";
 
 const NOW = new Date("2026-09-27T12:00:00Z");
@@ -216,6 +217,24 @@ describe("rating engine", () => {
     const c = card("triathlete");
     expect(rerateCard({ ...c, engineVersion: 0 })?.overall).toBe(c.overall);
     expect(rerateCard({ ...c, inputs: { ...c.inputs, schema: 5 as never } })).toBeNull();
+  });
+
+  it("applies card visibility", () => {
+    const pub = { visibility: "public" as const };
+    const link = { visibility: "unlisted" as const };
+    const priv = { visibility: "private" as const };
+    expect(canView(pub, false, false)).toBe(true);
+    expect(canView(link, false, false)).toBe(false);
+    expect(canView(link, false, true)).toBe(true);
+    expect(canView(priv, false, true)).toBe(false);
+    for (const s of [pub, link, priv]) expect(canView(s, true, false)).toBe(true);
+  });
+
+  it("never lets a username shadow app routes or share links", () => {
+    expect(slugFor({ id: 7, username: "guide" })).toBe("7");
+    expect(slugFor({ id: 7, username: "Privacy" })).toBe("7");
+    expect(slugFor({ id: 7, username: "link-abc" })).toBe("7");
+    expect(slugFor({ id: 7, username: "hanson" })).toBe("hanson");
   });
 
   it("tiers, slugs and names", () => {

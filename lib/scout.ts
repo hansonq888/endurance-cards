@@ -1,5 +1,6 @@
 import "server-only";
 import { after } from "next/server";
+import { resolveViewer, type Viewer } from "./access";
 import { calendarYears } from "./calendar";
 import { buildCard, ENGINE_VERSION, rerateCard, routesByDay, WINDOW_DAYS, withHistory } from "./engine";
 import { CooldownError, NotFoundError, StravaAuthError, UnauthorizedError } from "./errors";
@@ -79,13 +80,20 @@ async function athleteIdForSlug(slug: string): Promise<number> {
   return id;
 }
 
+/** A card plus what the current viewer is allowed to see of it. */
+export interface ViewedCard extends CardEnvelope {
+  viewer: Viewer;
+}
+
 /**
- * Cache-first card lookup used by the profile page, JSON API and image embeds.
- * Stale cards are served immediately and refreshed in the background
- * (stale-while-revalidate), so embeds never block on Strava.
+ * Cache-first card lookup used by the profile page, JSON API and image embeds,
+ * gated by the card's visibility (see lib/access.ts). Stale cards are served
+ * immediately and refreshed in the background (stale-while-revalidate), so
+ * embeds never block on Strava.
  */
-export async function getCardBySlug(slug: string): Promise<CardEnvelope> {
-  const athleteId = await athleteIdForSlug(slug);
+export async function getCardBySlug(slug: string, sessionAthleteId: number | null): Promise<ViewedCard> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
+  const { athleteId } = viewer;
   let card = await getCachedCard(athleteId);
 
   if (card && card.engineVersion !== ENGINE_VERSION) {
@@ -99,14 +107,16 @@ export async function getCardBySlug(slug: string): Promise<CardEnvelope> {
   if (!card) {
     // Missing or unusable card, but we may still hold tokens — rebuild synchronously.
     try {
-      return { card: await scoutAthlete(athleteId), stale: false, source: "fresh" };
+      card = await scoutAthlete(athleteId);
+      return { card, stale: false, source: "fresh", viewer: withPublicSlug(viewer, card) };
     } catch (err) {
       if (err instanceof StravaAuthError) throw new NotFoundError(`No scouted player named "${slug}"`);
       throw err;
     }
   }
 
-  if (isFresh(card)) return { card, stale: false, source: "cache" };
+  const envelope = { card, viewer: withPublicSlug(viewer, card) };
+  if (isFresh(card)) return { ...envelope, stale: false, source: "cache" };
 
   after(async () => {
     try {
@@ -115,7 +125,12 @@ export async function getCardBySlug(slug: string): Promise<CardEnvelope> {
       console.warn(`[strava-fut] background re-scout failed for ${athleteId}:`, (err as Error).message);
     }
   });
-  return { card, stale: true, source: "cache" };
+  return { ...envelope, stale: true, source: "cache" };
+}
+
+/** Public cards share their username URL even when opened via the secret link. */
+function withPublicSlug(viewer: Viewer, card: PlayerCard): Viewer {
+  return viewer.settings.visibility === "public" ? { ...viewer, shareSlug: card.slug } : viewer;
 }
 
 /** Owner-triggered "Re-scout" — bypasses freshness but is rate limited per athlete. */
@@ -136,6 +151,14 @@ export async function removeBySlug(slug: string, sessionAthleteId: number | null
     const fresh = await ensureFreshTokens(tokens).catch(() => tokens);
     await deauthorize(fresh.accessToken);
   }
+  await purgeAthlete(athleteId, [slug]);
+}
+
+/**
+ * Deletes everything we hold for an athlete. Used by "Remove card" and by the
+ * Strava webhook when someone revokes access on strava.com.
+ */
+export async function purgeAthlete(athleteId: number, extraSlugs: string[] = []): Promise<void> {
   const card = await getCachedCard(athleteId);
-  await deleteAthlete(athleteId, card?.slug ?? slug, card ? calendarYears(card) : []);
+  await deleteAthlete(athleteId, [...extraSlugs, ...(card ? [card.slug] : [])], card ? calendarYears(card) : []);
 }

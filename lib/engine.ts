@@ -659,8 +659,14 @@ export function rateInputs(i: ScoutInputs): Rating {
 
 // ---------- Card assembly ----------
 
+/** App paths a Strava username must never shadow; those athletes use their numeric id. */
+export const RESERVED_SLUGS = new Set(["guide", "privacy", "api", "settings", "login", "logout", "about", "admin", "help", "icon"]);
+
 export function slugFor(athlete: Pick<StravaAthlete, "id" | "username">): string {
-  return (athlete.username?.trim() || String(athlete.id)).toLowerCase();
+  const username = athlete.username?.trim().toLowerCase();
+  // Share-link tokens use the "link-" prefix, so usernames can't collide with them either.
+  if (!username || RESERVED_SLUGS.has(username) || username.startsWith("link-")) return String(athlete.id);
+  return username;
 }
 
 /** "Hanson Qin" → "HANSON Q." (Strava often exposes only a last initial anyway). */

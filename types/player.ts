@@ -187,3 +187,17 @@ export interface CardEnvelope {
   stale: boolean;
   source: "cache" | "fresh";
 }
+
+/** Who can see a card. */
+export type Visibility = "public" | "unlisted" | "private";
+
+/** Per-athlete privacy settings, stored apart from the (rebuilt-daily) card. */
+export interface CardSettings {
+  visibility: Visibility;
+  /** Secret slug for link-only sharing, e.g. "link-k3j9x0q2m7ab". */
+  shareToken: string;
+  /** Show the training calendar to visitors. */
+  showCalendar: boolean;
+  /** Let visitors open a day's route shape from the calendar. */
+  showRoutes: boolean;
+}

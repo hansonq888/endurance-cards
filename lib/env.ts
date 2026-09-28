@@ -25,6 +25,8 @@ export const env = {
   },
   /** Public origin, e.g. https://strava-fut.vercel.app. Falls back to the request origin. */
   appUrl: process.env.APP_URL?.replace(/\/$/, "") || null,
+  /** Shared secret Strava echoes back when verifying the webhook subscription. */
+  webhookVerifyToken: process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || null,
   /** Upstash / Vercel KV REST credentials. Absent → in-memory cache (dev only). */
   redisUrl: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || null,
   redisToken: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || null,

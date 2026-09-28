@@ -7,6 +7,7 @@ import { OwnerActions } from "@/components/OwnerActions";
 import { PlayerCard } from "@/components/PlayerCard";
 import { ShareBar } from "@/components/ShareBar";
 import { TiltCard } from "@/components/TiltCard";
+import { VisibilitySettings } from "@/components/VisibilitySettings";
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { PANEL, RaceLog, RatingTrend, SportMix, StatBreakdown, TrophyCabinet } from "@/components/ScoutReport";
 import { calendarYears } from "@/lib/calendar";
@@ -16,9 +17,10 @@ import { getCardBySlug } from "@/lib/scout";
 import { getSessionAthleteId } from "@/lib/session";
 import { publicOrigin } from "@/lib/url";
 
+/** Loads the card as the current viewer sees it (visibility rules in lib/access.ts). */
 const loadCard = cache(async (slug: string) => {
   try {
-    return await getCardBySlug(decodeURIComponent(slug));
+    return await getCardBySlug(decodeURIComponent(slug), await getSessionAthleteId());
   } catch (err) {
     if (err instanceof NotFoundError) notFound();
     throw err;
@@ -27,11 +29,13 @@ const loadCard = cache(async (slug: string) => {
 
 export async function generateMetadata({ params }: PageProps<"/[username]">): Promise<Metadata> {
   const { username } = await params;
-  const { card } = await loadCard(username);
+  const { card, viewer } = await loadCard(username);
   const title = `${card.name} — ${card.overall} ${TIER_THEMES[card.tier].label}`;
-  const image = `/${encodeURIComponent(card.slug)}.png`;
+  const image = `/${encodeURIComponent(viewer.shareSlug)}.png`;
   return {
     title,
+    // Only public cards should show up in search engines.
+    robots: viewer.settings.visibility === "public" ? undefined : { index: false, follow: false },
     description: `${card.archetype} · ${card.position} · PAC ${card.attributes.PAC.value} END ${card.attributes.END.value} VAR ${card.attributes.VAR.value}`,
     openGraph: { title, images: [{ url: image, width: 600, height: 840 }] },
     twitter: { card: "summary_large_image", title, images: [image] },
@@ -40,14 +44,15 @@ export async function generateMetadata({ params }: PageProps<"/[username]">): Pr
 
 export default async function ProfilePage({ params }: PageProps<"/[username]">) {
   const { username } = await params;
-  const [{ card, stale }, sessionAthleteId, origin] = await Promise.all([
-    loadCard(username),
-    getSessionAthleteId(),
-    publicOrigin(),
-  ]);
-  const isOwner = sessionAthleteId === card.athleteId;
-  const pageUrl = `${origin}/${encodeURIComponent(card.slug)}`;
-  const imageUrl = `${origin}/${encodeURIComponent(card.slug)}.png`;
+  const [{ card, stale, viewer }, origin] = await Promise.all([loadCard(username), publicOrigin()]);
+  const { isOwner, settings } = viewer;
+  // The slug this page was opened with: API calls from the page must use it (it may be the secret link).
+  const viewSlug = decodeURIComponent(username);
+  const share = encodeURIComponent(viewer.shareSlug);
+  const pageUrl = `${origin}/${share}`;
+  const imageUrl = `${origin}/${share}.png`;
+  const isPrivate = settings.visibility === "private";
+  const showCalendar = isOwner || settings.showCalendar;
   const scouted = new Date(card.scoutedAt);
 
   return (
@@ -102,13 +107,15 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
               name={card.name}
               pageUrl={pageUrl}
               imageUrl={imageUrl}
-              storyUrl={`${origin}/api/scout/${encodeURIComponent(card.slug)}/story`}
+              storyUrl={`${origin}/api/scout/${share}/story`}
               summary={`${card.overall} ${TIER_THEMES[card.tier].label} · ${card.archetype}`}
+              downloadOnly={isPrivate}
             />
           </div>
           {isOwner && (
-            <div className="relative mt-3">
+            <div className="relative mt-3 w-full max-w-[440px] space-y-4">
               <OwnerActions slug={card.slug} />
+              <VisibilitySettings slug={card.slug} settings={settings} origin={origin} publicSlug={card.slug} />
             </div>
           )}
         </section>
@@ -119,25 +126,35 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
 
         <div className="space-y-6 lg:col-start-3 lg:row-start-1">
           <SportMix card={card} />
-          <RaceLog card={card} />
+          {showCalendar && <RaceLog card={card} />}
           <TrophyCabinet card={card} isOwner={isOwner} />
         </div>
       </div>
 
-      <section className={`${PANEL} mt-6`}>
-        <ActivityHeatmap
-          slug={card.slug}
-          tier={card.tier}
-          years={calendarYears(card)}
-          recent={{ ...card.inputs.daily, races: card.inputs.races }}
-        />
-      </section>
+      {showCalendar && (
+        <section className={`${PANEL} mt-6`}>
+          <ActivityHeatmap
+            slug={viewSlug}
+            tier={card.tier}
+            years={calendarYears(card)}
+            recent={{ ...card.inputs.daily, races: card.inputs.races }}
+            routesEnabled={isOwner || settings.showRoutes}
+          />
+        </section>
+      )}
 
-      <div className="mt-6">
-        <EmbedSnippet pageUrl={pageUrl} imageUrl={imageUrl} name={card.name} />
-      </div>
+      {!isPrivate && (
+        <div className="mt-6">
+          <EmbedSnippet pageUrl={pageUrl} imageUrl={imageUrl} name={card.name} />
+        </div>
+      )}
 
-      <footer className="mt-12 text-center text-xs text-muted">Powered by Strava</footer>
+      <footer className="mt-12 flex justify-center gap-4 text-xs text-muted">
+        <span>Powered by Strava</span>
+        <Link href="/privacy" className="hover:text-foreground">
+          Privacy
+        </Link>
+      </footer>
     </main>
   );
 }

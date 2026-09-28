@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ensureSettings } from "@/lib/access";
 import { randomToken } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { AppError, RateLimitError } from "@/lib/errors";
@@ -69,6 +70,8 @@ async function handle(req: NextRequest) {
     scope: granted.join(","),
   });
   await setSession(athleteId);
+  // First connect: start link-only (shareable, not discoverable). Existing choices are kept.
+  await ensureSettings(athleteId);
   const card = await scoutAthlete(athleteId);
 
   const res = NextResponse.redirect(new URL(`/${encodeURIComponent(card.slug)}`, origin(req)));

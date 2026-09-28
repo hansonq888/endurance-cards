@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     "/api/scout/[username]": ["./assets/fonts/**"],
     "/api/scout/[username]/card": ["./assets/fonts/**"],
     "/api/scout/[username]/story": ["./assets/fonts/**"],
+    "/icon": ["./assets/fonts/**"],
   },
   images: {
     remotePatterns: [

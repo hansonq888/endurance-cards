@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PlayerCard } from "@/components/PlayerCard";
-import { ScaleBar, STAT_ICONS } from "@/components/ScoutReport";
+import { STAT_ICONS } from "@/components/ScoutReport";
 import { SectionHeading } from "@/components/SectionHeading";
 import { TiltCard } from "@/components/TiltCard";
 import { TrophyBadge } from "@/components/TrophyBadge";
 import { holoVars, TIER_THEMES } from "@/lib/card-theme";
 import { buildCard, LEGACY_GATE, OVR_WEIGHTS, TIER_THRESHOLDS } from "@/lib/engine";
-import { RATING_BANDS, ratingWord, STAT_INPUTS, STAT_MEASURES } from "@/lib/explain";
+import { RATING_BANDS } from "@/lib/explain";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { formatValue, TROPHIES } from "@/lib/trophies";
 import { ATTRIBUTE_KEYS, type AttributeKey, type CardTier } from "@/types/player";
@@ -15,6 +15,16 @@ import { ATTRIBUTE_KEYS, type AttributeKey, type CardTier } from "@/types/player
 export const metadata: Metadata = {
   title: "Guide",
   description: "How Strava-FUT rates athletes: tiers, stats and every trophy.",
+};
+
+/** Four-to-five-word summaries for the guide. */
+const STAT_SHORT: Record<AttributeKey, string> = {
+  PAC: "How fast you go",
+  END: "How long you last",
+  PWR: "How hard you climb and push",
+  CONS: "How often you show up",
+  VAR: "How many sports you do",
+  PHY: "How long you've been at it",
 };
 
 const STAT_NAMES: Record<AttributeKey, string> = {
@@ -50,8 +60,6 @@ function tierRange(tier: CardTier) {
 
 export default function GuidePage() {
   const tiers = tierCards();
-  // Example values on each stat come from the Gold demo athlete.
-  const exampleCard = tiers.find((t) => t.tier === "gold")!.card;
   return (
     <main className="mx-auto w-full max-w-[1320px] flex-1 overflow-x-clip px-4 py-8 sm:py-12">
       <nav className="mb-10 flex items-center justify-between">
@@ -105,68 +113,70 @@ export default function GuidePage() {
       {/* Stats */}
       <section className="mb-16">
         <SectionHeading>The six stats</SectionHeading>
-        {/* How the overall is built: six stats, sized by weight. */}
-        <div className="mb-10 font-accent">
-          <p className="mb-2 text-[11px] uppercase tracking-wider text-muted">How your overall is built</p>
-          <div className="flex h-9 gap-0.5 overflow-hidden rounded-lg">
-            {ATTRIBUTE_KEYS.map((k, i) => (
-              <div
-                key={k}
-                className="flex items-center justify-center text-[11px] font-medium text-background"
-                style={{ flex: OVR_WEIGHTS[k], background: "var(--strava)", opacity: i % 2 ? 0.72 : 1 }}
-              >
-                {k} {Math.round(OVR_WEIGHTS[k] * 100)}%
-              </div>
-            ))}
+        {/* One equation: OVR = weighted sum of six stats. Weight is the big number; the bar shows it relative to the largest. */}
+        <div className="flex flex-col gap-6 font-accent lg:flex-row lg:items-center">
+          <div className="flex shrink-0 items-baseline gap-3">
+            <span className="display text-5xl leading-none text-strava">OVR</span>
+            <span className="text-3xl text-muted">=</span>
           </div>
-          <p className="mb-2 mt-6 text-[11px] uppercase tracking-wider text-muted">What the numbers mean</p>
-          <div className="flex gap-0.5">
-            {RATING_BANDS.map((b, i) => {
-              const next = RATING_BANDS[i + 1]?.min ?? 100;
+          <ol className="grid flex-1 grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-6 lg:gap-x-0">
+            {ATTRIBUTE_KEYS.map((k, i) => {
+              const Icon = STAT_ICONS[k];
+              const weight = Math.round(OVR_WEIGHTS[k] * 100);
               return (
-                <div key={b.word} style={{ flex: next - b.min }}>
-                  <div className="h-1.5 rounded-full bg-strava" style={{ opacity: 0.25 + i * 0.19 }} />
-                  <p className="mt-1.5 text-[11px]">{b.word}</p>
-                  <p className="text-[10px] text-muted tabular-nums">{b.min}+</p>
+                <li key={k} className="relative lg:px-4">
+                  {i > 0 && (
+                    <span aria-hidden className="absolute -left-1.5 top-3 hidden text-lg text-muted lg:block">
+                      +
+                    </span>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 text-strava" aria-hidden />
+                    <span className="text-xs font-medium tracking-wider">{k}</span>
+                  </div>
+                  <p className="mt-2 text-3xl font-medium leading-none tabular-nums">
+                    {weight}
+                    <span className="text-sm text-muted">%</span>
+                  </p>
+                  <div className="mt-2 h-1 rounded-full bg-white/[0.07]">
+                    <div className="h-full rounded-full bg-strava" style={{ width: `${(weight / 20) * 100}%` }} />
+                  </div>
+                  <p className="display mt-3 text-sm leading-none">{STAT_NAMES[k]}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-muted">{STAT_SHORT[k]}</p>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* Separate scale: how to read any single stat. */}
+        <div className="mt-14 font-accent">
+          <p className="mb-5 text-[11px] uppercase tracking-wider text-muted">Every stat · 1–99</p>
+          <div className="relative mx-2 h-12">
+            <div
+              className="absolute inset-x-0 top-5 h-px"
+              style={{ background: "linear-gradient(90deg, color-mix(in srgb, var(--strava) 25%, transparent), var(--strava))" }}
+            />
+            {[...RATING_BANDS.map((b) => b.min), 99].map((n, i) => {
+              const left = `${((n - 1) / 98) * 100}%`;
+              const band = RATING_BANDS[i];
+              const nextMin = RATING_BANDS[i + 1]?.min ?? 99;
+              return (
+                <div key={n}>
+                  <div className="absolute top-0 -translate-x-1/2 text-[10px] text-muted tabular-nums" style={{ left }}>
+                    {n}
+                  </div>
+                  <div className="absolute top-3.5 h-3 w-px -translate-x-1/2 bg-foreground/50" style={{ left }} />
+                  {band && (
+                    <div className="absolute top-8 text-center text-[11px]" style={{ left, width: `${((nextMin - band.min) / 98) * 100}%` }}>
+                      {band.word}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
-
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-          {ATTRIBUTE_KEYS.map((k) => {
-            const Icon = STAT_ICONS[k];
-            const example = exampleCard.attributes[k].value;
-            return (
-              <li key={k} className="font-accent">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2">
-                    <Icon className="h-4.5 w-4.5 text-strava" aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="display text-lg leading-none">{STAT_NAMES[k]}</p>
-                    <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
-                      {k} · {Math.round(OVR_WEIGHTS[k] * 100)}% of overall
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs">{STAT_MEASURES[k]}.</p>
-                <p className="mt-1 text-[11px] text-muted">{STAT_INPUTS[k]}.</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <ScaleBar value={example} className="h-1.5 flex-1" />
-                  <span className="text-[11px] text-muted tabular-nums">
-                    e.g. <span className="text-foreground">{example}</span> · {ratingWord(example)}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-4 font-accent text-xs text-muted">
-          Every sport is rated against people who do that sport, then blended by how much time you spend on it. A swimmer is
-          compared with swimmers, never converted into “running kilometres”.
-        </p>
       </section>
 
       {/* Trophies */}

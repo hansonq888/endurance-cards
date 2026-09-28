@@ -15,6 +15,7 @@ export function ShareBar({
   imageUrl,
   storyUrl,
   summary,
+  downloadOnly = false,
 }: {
   slug: string;
   name: string;
@@ -23,6 +24,8 @@ export function ShareBar({
   storyUrl: string;
   /** e.g. "79 Gold · Triathlete" */
   summary: string;
+  /** Private cards: only the owner's downloads, no links to share. */
+  downloadOnly?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,25 +64,31 @@ export function ShareBar({
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-muted">
-      <button type="button" onClick={share} disabled={busy} className={`${btn} border-strava/60 text-foreground`}>
-        <Share2 className="h-3.5 w-3.5 text-strava" aria-hidden /> Share
-      </button>
+      {!downloadOnly && (
+        <button type="button" onClick={share} disabled={busy} className={`${btn} border-strava/60 text-foreground`}>
+          <Share2 className="h-3.5 w-3.5 text-strava" aria-hidden /> Share
+        </button>
+      )}
       <a href={imageUrl} download={`${slug}-strava-fut.png`} className={btn}>
         <Download className="h-3.5 w-3.5" aria-hidden /> Card
       </a>
       <a href={storyUrl} download={`${slug}-strava-fut-story.png`} className={btn} title="1080×1920 for Instagram, TikTok and Snapchat stories">
         <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story
       </a>
-      <button type="button" onClick={copyLink} className={btn}>
-        {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Link2 className="h-3.5 w-3.5" aria-hidden />}
-        {copied ? "Copied" : "Link"}
-      </button>
-      <a href={tweet} target="_blank" rel="noopener noreferrer" className={btn} aria-label="Post on X">
-        <span className="font-bold" aria-hidden>
-          𝕏
-        </span>{" "}
-        Post
-      </a>
+      {!downloadOnly && (
+        <>
+          <button type="button" onClick={copyLink} className={btn}>
+            {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Link2 className="h-3.5 w-3.5" aria-hidden />}
+            {copied ? "Copied" : "Link"}
+          </button>
+          <a href={tweet} target="_blank" rel="noopener noreferrer" className={btn} aria-label="Post on X">
+            <span className="font-bold" aria-hidden>
+              𝕏
+            </span>{" "}
+            Post
+          </a>
+        </>
+      )}
     </div>
   );
 }

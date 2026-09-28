@@ -66,6 +66,34 @@ Tiers are landscape colourways: Canyon (bronze), Granite (silver), Alpenglow (go
 The bottom-right highlight depends on the main sport: km run / swum / paddled, km climbed
 (cycling, hiking, skiing) or hours trained (triathlon, gym, other).
 
+## Privacy & visibility
+
+Each athlete chooses who can see their card (owner panel on the card page, `PATCH /api/scout/[username]/settings`):
+
+| Visibility | Who can view |
+| --- | --- |
+| **Link only** (default on first connect) | The owner, and anyone with the secret `/link-…` URL. `/username` returns 404. |
+| **Public** | Anyone, at `/username`. |
+| **Private** | The signed-in owner only. |
+
+Owners can also hide the training calendar/races and route shapes from visitors. Every doorway (page,
+PNG, story, JSON, calendar and routes APIs) goes through `resolveViewer` in `lib/access.ts`; anything
+not allowed is a plain 404. Private and owner-only responses are `Cache-Control: private, no-store`.
+Usernames that would shadow app routes (`guide`, `privacy`, `api`, …) fall back to the numeric id.
+What's stored and why is documented for users at `/privacy`.
+
+### Strava webhook
+
+`/api/strava/webhook` deletes an athlete's data when they revoke access on strava.com (required by the
+Strava API Agreement) and re-scouts cards when activities change. After deploying, set
+`STRAVA_WEBHOOK_VERIFY_TOKEN` and create the subscription once:
+
+```bash
+curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+  -F client_id=$STRAVA_CLIENT_ID -F client_secret=$STRAVA_CLIENT_SECRET \
+  -F callback_url=https://YOUR_DOMAIN/api/strava/webhook -F verify_token=$STRAVA_WEBHOOK_VERIFY_TOKEN
+```
+
 ## Rating engine
 
 All attributes are 1–99. Volumes use `logScale` (log1p between a floor and a ceiling) and speeds use

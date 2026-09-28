@@ -1,7 +1,7 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
 import { env } from "./env";
-import type { PlayerCard, RoutesByDay, YearCalendar } from "@/types/player";
+import type { CardSettings, PlayerCard, RoutesByDay, YearCalendar } from "@/types/player";
 import type { StoredTokens } from "@/types/strava";
 import { decrypt, encrypt } from "./crypto";
 
@@ -18,6 +18,7 @@ import { decrypt, encrypt } from "./crypto";
  *   budget                last seen Strava rate-limit usage
  *   cal:{athleteId}:{yr}  YearCalendar JSON         no TTL (past years never change)
  *   routes:{id}:{bucket}  RoutesByDay (shapes only) bucket = "recent" (rolling window) or a year
+ *   settings:{athleteId}  CardSettings (visibility, share token, section toggles)  no TTL
  */
 
 const PREFIX = "sfut:";
@@ -124,6 +125,7 @@ const k = {
   calendar: (id: number, year: number) => `${PREFIX}cal:${id}:${year}`,
   calendarLock: (id: number, year: number) => `${PREFIX}cal-lock:${id}:${year}`,
   routes: (id: number, bucket: RouteBucket) => `${PREFIX}routes:${id}:${bucket}`,
+  settings: (id: number) => `${PREFIX}settings:${id}`,
 };
 
 // ---------- Cards ----------
@@ -175,16 +177,20 @@ export async function deleteTokens(athleteId: number): Promise<void> {
   await store().del(k.tokens(athleteId));
 }
 
-export async function deleteAthlete(athleteId: number, slug?: string, calendarYears: number[] = []): Promise<void> {
+/** Removes every trace of an athlete: card, tokens, settings, slugs, calendars and routes. */
+export async function deleteAthlete(athleteId: number, slugs: string[] = [], calendarYears: number[] = []): Promise<void> {
+  const settings = await getSettings(athleteId);
   const keys = [
     k.card(athleteId),
     k.tokens(athleteId),
+    k.settings(athleteId),
     k.slug(String(athleteId)),
     k.cooldown(athleteId),
     ...calendarYears.flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]),
     k.routes(athleteId, "recent"),
+    ...slugs.map((s) => k.slug(s)),
   ];
-  if (slug) keys.push(k.slug(slug));
+  if (settings) keys.push(k.slug(settings.shareToken));
   await store().del(...keys);
 }
 
@@ -254,4 +260,18 @@ export async function saveRoutes(athleteId: number, bucket: RouteBucket, routes:
 
 export async function getRoutes(athleteId: number, bucket: RouteBucket): Promise<RoutesByDay | null> {
   return store().get<RoutesByDay>(k.routes(athleteId, bucket));
+}
+
+// ---------- Privacy settings ----------
+
+export async function getSettings(athleteId: number): Promise<CardSettings | null> {
+  return store().get<CardSettings>(k.settings(athleteId));
+}
+
+/** Saves settings and keeps the share-token slug pointing at the athlete (dropping a replaced token). */
+export async function saveSettings(athleteId: number, settings: CardSettings, previousToken?: string): Promise<void> {
+  const s = store();
+  await s.set(k.settings(athleteId), settings);
+  await s.set(k.slug(settings.shareToken), athleteId);
+  if (previousToken && previousToken !== settings.shareToken) await s.del(k.slug(previousToken));
 }
