@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, Download, Link2, Share2, Smartphone } from "lucide-react";
 import { BRAND } from "@/lib/brand";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Download / share controls under the card, for every visitor. On phones,
@@ -30,6 +30,25 @@ export function ShareBar({
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const saveMenu = useRef<HTMLDetailsElement>(null);
+
+  // Close the Save menu on a click or tap anywhere outside it, or on Escape.
+  useEffect(() => {
+    const close = (e: PointerEvent | KeyboardEvent) => {
+      const menu = saveMenu.current;
+      if (!menu?.open) return;
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !menu.contains(e.target as Node)) menu.open = false;
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, []);
+  const closeSaveMenu = () => {
+    if (saveMenu.current) saveMenu.current.open = false;
+  };
   const text = `${name}'s ${BRAND.name} card: ${summary}`;
 
   async function copyLink() {
@@ -71,16 +90,16 @@ export function ShareBar({
         </button>
       )}
       {/* Both downloads behind one button: the card PNG and the 1080×1920 story. */}
-      <details className="group relative">
+      <details ref={saveMenu} className="group relative">
         <summary className={`${btn} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
           <Download className="h-3.5 w-3.5" aria-hidden /> Save
           <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" aria-hidden />
         </summary>
         <div className="absolute left-1/2 z-30 mt-1.5 w-44 -translate-x-1/2 rounded-lg border border-line bg-surface p-1 font-accent text-[11px] shadow-xl">
-          <a href={imageUrl} download={`${slug}-${BRAND.fileSlug}.png`} className={item}>
+          <a href={imageUrl} download={`${slug}-${BRAND.fileSlug}.png`} className={item} onClick={closeSaveMenu}>
             <Download className="h-3.5 w-3.5" aria-hidden /> Card image
           </a>
-          <a href={storyUrl} download={`${slug}-${BRAND.fileSlug}-story.png`} className={item}>
+          <a href={storyUrl} download={`${slug}-${BRAND.fileSlug}-story.png`} className={item} onClick={closeSaveMenu}>
             <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story (1080×1920)
           </a>
         </div>

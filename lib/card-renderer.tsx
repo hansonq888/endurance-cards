@@ -5,6 +5,7 @@ import { ImageResponse } from "next/og";
 import type { PlayerCard } from "@/types/player";
 import { TURTLE_ON_DARK, turtleDataUri } from "./turtle";
 import { CardFace } from "./card-face";
+import { isDemoAvatar } from "./engine";
 import { CARD_H, CARD_W, PNG_SCALE, TIER_THEMES } from "./card-theme";
 
 /**
@@ -44,6 +45,11 @@ const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com)$/i;
 /** Inlines the avatar so a slow/broken Strava CDN can't fail the whole render. */
 async function avatarDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
+  if (isDemoAvatar(url)) {
+    // Bundled demo photo: read it from disk (traced into the PNG routes in next.config.ts).
+    const buf = await readFile(join(process.cwd(), "public", url)).catch(() => null);
+    return buf ? `data:image/jpeg;base64,${buf.toString("base64")}` : null;
+  }
   try {
     const { protocol, hostname } = new URL(url);
     if (protocol !== "https:" || !AVATAR_HOSTS.test(hostname)) return null;

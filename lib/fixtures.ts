@@ -48,6 +48,8 @@ export interface AthleteProfile {
   workoutShare?: number;
   /** Extra PRs per run/ride/hike on average: how much of a segment and best-effort hunter they are. */
   prHunting?: number;
+  /** Profile photo for the demo card (public/demo-avatars, Pixabay Content License). */
+  avatar?: string;
 }
 
 const PR_SPORTS = new Set(["Run", "TrailRun", "Ride", "GravelRide", "MountainBikeRide", "Hike", "Walk"]);
@@ -169,7 +171,7 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
     sex: null,
     created_at: new Date(nowMs - profile.tenureYears * 365.25 * DAY).toISOString(),
     updated_at: now.toISOString(),
-    profile: "avatar/athlete/large.png",
+    profile: profile.avatar ?? "avatar/athlete/large.png",
     profile_medium: "avatar/athlete/medium.png",
   };
 
@@ -193,6 +195,7 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
 
 export const PROFILES = {
   casualJogger: {
+    avatar: "/demo-avatars/cat.jpg",
     prHunting: 0.3,
     workoutShare: 0.02,
     seed: 11,
@@ -202,6 +205,7 @@ export const PROFILES = {
     restWeeks: [2, 3, 7, 8, 9, 15, 16, 20, 30, 31],
   },
   dedicatedRunner: {
+    avatar: "/demo-avatars/fox.jpg",
     prHunting: 0.1,
     workoutShare: 0.03,
     seed: 22,
@@ -214,6 +218,7 @@ export const PROFILES = {
     ],
   },
   triathlete: {
+    avatar: "/demo-avatars/leopard.jpg",
     prHunting: 0.3,
     workoutShare: 0.18,
     seed: 33,
@@ -226,6 +231,7 @@ export const PROFILES = {
     ],
   },
   eliteMountainRunner: {
+    avatar: "/demo-avatars/goat.jpg",
     prHunting: 1.4,
     workoutShare: 0.32,
     seed: 44,
@@ -240,6 +246,7 @@ export const PROFILES = {
     ],
   },
   poolSwimmer: {
+    avatar: "/demo-avatars/otter.jpg",
     workoutShare: 0.2,
     seed: 55,
     tenureYears: 3,
@@ -247,6 +254,7 @@ export const PROFILES = {
     sessions: [{ sport_type: "Swim", perWeek: 5, km: [2.5, 5], speed: [1.15, 1.35], climb: [0, 0], hr: [135, 158] }],
   },
   gymGoer: {
+    avatar: "/demo-avatars/bear.jpg",
     workoutShare: 0,
     seed: 66,
     tenureYears: 2,

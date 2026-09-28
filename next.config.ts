@@ -10,11 +10,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // The PNG renderer reads vendored fonts from disk at runtime.
+  // The PNG renderers read vendored fonts and the demo-card photos from disk at runtime.
   outputFileTracingIncludes: {
-    "/api/scout/[username]": ["./assets/fonts/**"],
-    "/api/scout/[username]/card": ["./assets/fonts/**"],
-    "/api/scout/[username]/story": ["./assets/fonts/**"],
+    "/api/scout/[username]/card": ["./assets/fonts/**", "./public/demo-avatars/**"],
+    "/api/scout/[username]/story": ["./assets/fonts/**", "./public/demo-avatars/**"],
   },
   images: {
     remotePatterns: [
