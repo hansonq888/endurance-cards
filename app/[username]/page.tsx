@@ -171,7 +171,6 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
         <section className={`${PANEL} reveal mt-6`}>
           <ActivityHeatmap
             slug={viewSlug}
-            tier={card.tier}
             years={calendarYears(card)}
             recent={{ ...card.inputs.daily, races: card.inputs.races }}
             routesEnabled={isOwner || settings.showRoutes}

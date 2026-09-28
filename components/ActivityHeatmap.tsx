@@ -2,7 +2,7 @@
 
 import { BarChart3, LayoutGrid } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CardTier, RaceResult, YearCalendar } from "@/types/player";
+import type { RaceResult, YearCalendar } from "@/types/player";
 import { fmtDuration, HEAT_STEPS, heatStep } from "@/lib/viz";
 import { DayRoutes } from "./DayRoutes";
 
@@ -67,7 +67,6 @@ function flagPath(x: number, y: number) {
  */
 export function ActivityHeatmap({
   slug,
-  tier,
   years,
   recent,
   routesEnabled = true,
@@ -78,8 +77,6 @@ export function ActivityHeatmap({
   view?: "link" | "public";
   /** False when the owner hides routes from visitors: days aren't clickable. */
   routesEnabled?: boolean;
-  /** Tints the holographic route panel to the card's tier. */
-  tier: CardTier;
   /** Past calendar years that can be loaded, newest first. */
   years: number[];
   /** The rolling last-12-months series that ships with the card. */
@@ -453,7 +450,7 @@ export function ActivityHeatmap({
               )}
             </div>
           </div>
-          {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} tier={tier} day={picked} view={previewView} onClose={() => setPicked(null)} />}
+          {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} day={picked} view={previewView} onClose={() => setPicked(null)} />}
         </div>
       </div>
     </div>
