@@ -1,22 +1,32 @@
 "use client";
 
-import { Check, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { visitorAudience, type PrivacyMix } from "@/lib/audience";
 import type { CardSettings } from "@/types/player";
 import { visibilityOption, VISIBILITY_OPTIONS } from "./visibilityOptions";
 
-/** Owner-only (inside CardSettingsPanel): who can see the card, which sections visitors get, and the share link. */
+/**
+ * Owner-only (inside CardSettingsPanel): who can see the card, the secret link,
+ * how much of their training visitors get (with a preview), and which sections
+ * visitors see.
+ */
 export function VisibilitySettings({
   slug,
   settings: initial,
   origin,
-  publicSlug,
+  privacy,
+  pagePath,
 }: {
   slug: string;
   settings: CardSettings;
   origin: string;
-  publicSlug: string;
+  /** The owner card's Strava visibility mix; absent on cards scouted before audiences existed. */
+  privacy?: PrivacyMix;
+  /** This page's path, for the preview link. */
+  pagePath: string;
 }) {
   const router = useRouter();
   const [settings, setSettings] = useState(initial);
@@ -53,12 +63,8 @@ export function VisibilitySettings({
     }
   }
 
-  const link =
-    settings.visibility === "public"
-      ? `${origin}/${publicSlug}`
-      : settings.visibility === "unlisted"
-        ? `${origin}/${settings.shareToken}`
-        : null;
+  // Public cards are shared at the username (the Share bar has it); only link-only cards need their secret link here.
+  const link = settings.visibility === "unlisted" ? `${origin}/${settings.shareToken}` : null;
 
   async function copy() {
     if (!link) return;
@@ -72,12 +78,14 @@ export function VisibilitySettings({
   }
 
   const current = visibilityOption(settings.visibility);
-  const toggle = "flex w-full items-center justify-between gap-3 py-2 text-left text-xs disabled:opacity-50";
+  const audience = visitorAudience(settings.visibility);
+  const [everyone, followers, onlyMe] = privacy?.activities ?? [0, 0, 0];
+  const seen = audience === "public" ? everyone : everyone + followers;
+  const total = everyone + followers + onlyMe;
 
   return (
-    <div className="text-left font-accent">
-      <p className="mb-2 text-[10px] uppercase tracking-wider text-muted">Who can see it</p>
-      <div role="radiogroup" aria-label="Card visibility" className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
+    <div className="space-y-3 text-left font-accent">
+      <div role="radiogroup" aria-label="Who can see your card" className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
         {VISIBILITY_OPTIONS.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
@@ -94,55 +102,85 @@ export function VisibilitySettings({
           </button>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-muted">{current.help}</p>
+      <p className="text-[11px] leading-relaxed text-muted">
+        {current.help}
+        {settings.autoVisibility && <> Picked to match your Strava privacy.</>}
+      </p>
 
       {link && (
-        <div className="mt-3 flex items-stretch gap-2">
+        <div className="flex items-stretch gap-1.5">
           <code className="min-w-0 flex-1 truncate rounded-md border border-line px-2.5 py-1.5 text-[11px]">{link}</code>
-          <button type="button" onClick={copy} className="flex items-center gap-1 rounded-md border border-line px-2.5 text-[11px] hover:bg-surface-2" aria-label="Copy link">
+          <button type="button" onClick={copy} className={iconBtn} aria-label="Copy link" title="Copy link">
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          {settings.visibility === "unlisted" && (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => confirm("Make a new link? The old one will stop working for everyone.") && update({ resetLink: true })}
-              className="flex items-center gap-1 rounded-md border border-line px-2.5 text-[11px] hover:bg-surface-2"
-              aria-label="Reset link"
-              title="Reset link"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {settings.visibility !== "private" && (
-        <div className="mt-3 divide-y divide-line border-t border-line">
-          <button type="button" disabled={saving} className={toggle} onClick={() => update({ showCalendar: !settings.showCalendar })} aria-pressed={settings.showCalendar}>
-            <span>
-              Training calendar & races
-              <span className="block text-[10px] text-muted">Shows which days you train</span>
-            </span>
-            {settings.showCalendar ? <Eye className="h-4 w-4 text-strava" aria-label="Visible" /> : <EyeOff className="h-4 w-4 text-muted" aria-label="Hidden" />}
           </button>
           <button
             type="button"
-            disabled={saving || !settings.showCalendar}
-            className={toggle}
-            onClick={() => update({ showRoutes: !settings.showRoutes })}
-            aria-pressed={settings.showRoutes}
+            disabled={saving}
+            onClick={() => confirm("Make a new link? The old one will stop working for everyone.") && update({ resetLink: true })}
+            className={iconBtn}
+            aria-label="Make a new link"
+            title="Make a new link"
           >
-            <span>
-              Route shapes on the calendar
-              <span className="block text-[10px] text-muted">Shapes only, never placed on a map</span>
-            </span>
-            {settings.showRoutes && settings.showCalendar ? <Eye className="h-4 w-4 text-strava" aria-label="Visible" /> : <EyeOff className="h-4 w-4 text-muted" aria-label="Hidden" />}
+            <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
-      {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
-      <p className="mt-2 text-[10px] text-muted">Only changes what visitors see. You always see everything.</p>
+
+      {audience && (
+        <>
+          {/* What visitors get, in one line: only activities they could see on Strava (lib/audience.ts). */}
+          {privacy && (
+            <p className={`flex items-center justify-between gap-3 text-[11px] ${seen === 0 ? "text-red-300/90" : "text-muted"}`}>
+              <span>
+                {seen === 0 ? (
+                  "None of your activities are visible to them on Strava"
+                ) : (
+                  <>
+                    Visitors see <span className="text-foreground">{seen.toLocaleString("en-US")}</span> of {total.toLocaleString("en-US")} activities
+                  </>
+                )}
+              </span>
+              <Link href={`${pagePath}?view=${audience}`} className="shrink-0 uppercase tracking-wider text-foreground hover:text-strava">
+                Preview →
+              </Link>
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-muted">Show visitors</span>
+            <Switch label="Calendar" on={settings.showCalendar} disabled={saving} onChange={() => update({ showCalendar: !settings.showCalendar })} />
+            <Switch
+              label="Routes"
+              on={settings.showCalendar && settings.showRoutes}
+              disabled={saving || !settings.showCalendar}
+              onChange={() => update({ showRoutes: !settings.showRoutes })}
+            />
+          </div>
+        </>
+      )}
+      {error && <p className="text-[11px] text-red-300">{error}</p>}
     </div>
+  );
+}
+
+const iconBtn = "flex items-center rounded-md border border-line px-2.5 text-muted hover:bg-surface-2 hover:text-foreground disabled:opacity-50";
+
+/** A small labelled on/off pill. */
+function Switch({ label, on, disabled, onChange }: { label: string; on: boolean; disabled?: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onChange}
+      className={`flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors disabled:opacity-40 ${
+        on ? "border-strava/50 text-foreground" : "border-line text-muted"
+      }`}
+    >
+      <span className={`relative h-3 w-5 rounded-full transition-colors ${on ? "bg-strava" : "bg-white/15"}`} aria-hidden>
+        <span className={`absolute top-0.5 h-2 w-2 rounded-full bg-white transition-all ${on ? "left-2.5" : "left-0.5"}`} />
+      </span>
+      {label}
+    </button>
   );
 }
