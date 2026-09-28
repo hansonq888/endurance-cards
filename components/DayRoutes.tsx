@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CardTier, RouteShape } from "@/types/player";
-import { holoVars } from "@/lib/card-theme";
+import type { RouteShape } from "@/types/player";
 import { fmtDuration, SPORT_COLORS, SPORT_LABELS } from "@/lib/viz";
 
 /** The calendar day a route panel is for. */
@@ -34,13 +33,11 @@ const routeCache = new Map<string, RouteShape[]>();
 /** The clicked day's route(s): shape only, fetched on demand. */
 export function DayRoutes({
   slug,
-  tier,
   day,
   view,
   onClose,
 }: {
   slug: string;
-  tier: CardTier;
   day: RouteDay;
   view?: "link" | "public";
   onClose: () => void;
@@ -72,43 +69,18 @@ export function DayRoutes({
   const routes = state.routes;
   const route = routes?.[index];
 
-  // Foil sheen follows the pointer across the route window.
-  function sheen(e: React.PointerEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    e.currentTarget.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
-    e.currentTarget.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
-  }
-
   return (
-    <div className="mt-5 flex flex-col gap-6 border-t border-line pt-5 sm:flex-row sm:items-center" style={holoVars(tier)}>
-      {/* The route floats on a soft tier-tinted glow — no frame. */}
-      <div onPointerMove={sheen} className="group relative aspect-square w-full max-w-[200px] shrink-0 self-center sm:self-auto">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{ background: "radial-gradient(circle, color-mix(in srgb, var(--holo-1) 12%, transparent), transparent 65%)" }}
-        />
+    <div className="mt-5 flex flex-col gap-6 border-t border-line pt-5 sm:flex-row sm:items-center">
+      <div className="relative aspect-square w-full max-w-[200px] shrink-0 self-center sm:self-auto">
         {route ? (
           <svg viewBox="0 0 100 100" className="relative h-full w-full" role="img" aria-label={`Route shape of ${route.name}`}>
-            <defs>
-              <linearGradient id={`holo-${day.key}`} x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" style={{ stopColor: "var(--holo-1)" }} />
-                <stop offset="0.35" style={{ stopColor: "var(--holo-2)" }} />
-                <stop offset="0.65" style={{ stopColor: "var(--holo-3)" }} />
-                <stop offset="1" style={{ stopColor: "var(--holo-4)" }} />
-              </linearGradient>
-            </defs>
             <path
               d={shapePath(route.points, 100, 14)}
               fill="none"
-              stroke={`url(#holo-${day.key})`}
+              stroke={SPORT_COLORS[route.family]}
               strokeWidth={2.6}
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{
-                filter:
-                  "drop-shadow(0 0 3px color-mix(in srgb, var(--holo-2) 60%, transparent)) drop-shadow(0 0 8px color-mix(in srgb, var(--holo-4) 40%, transparent))",
-              }}
             />
           </svg>
         ) : (
@@ -116,11 +88,6 @@ export function DayRoutes({
             {state.error ?? (routes ? "No GPS route (indoor, pool or manual)" : "Loading…")}
           </div>
         )}
-        <div
-          aria-hidden
-          className="holo-foil pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 group-hover:opacity-70"
-          style={{ maskImage: "radial-gradient(circle, black 35%, transparent 70%)", WebkitMaskImage: "radial-gradient(circle, black 35%, transparent 70%)" }}
-        />
       </div>
 
       <div className="min-w-0 flex-1">
@@ -174,12 +141,8 @@ export function DayRoutes({
                     <span className="block tabular-nums">{r.distanceKm} km</span>
                   </span>
                 </span>
-                {/* Foil underline marks the selected activity. */}
-                <span
-                  aria-hidden
-                  className={`h-0.5 w-full rounded-full ${i === index ? "" : "invisible"}`}
-                  style={{ background: "linear-gradient(90deg, var(--holo-1), var(--holo-2), var(--holo-3), var(--holo-4))" }}
-                />
+                {/* Underline marks the selected activity. */}
+                <span aria-hidden className={`h-0.5 w-full rounded-full bg-strava ${i === index ? "" : "invisible"}`} />
               </button>
             ))}
           </div>
