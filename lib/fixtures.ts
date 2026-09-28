@@ -195,7 +195,7 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
 
 export const PROFILES = {
   casualJogger: {
-    avatar: "/demo-avatars/bear.jpg",
+    avatar: "/demo-avatars/cat.jpg",
     prHunting: 0.3,
     workoutShare: 0.02,
     seed: 11,
