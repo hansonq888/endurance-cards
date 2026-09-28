@@ -1,7 +1,8 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
+import { VISITOR_AUDIENCES, type VisitorAudience } from "./audience";
 import { env } from "./env";
-import type { PlayerCard, RoutesByDay, YearCalendar } from "@/types/player";
+import type { CardSettings, PlayerCard, RoutesByDay, YearCalendar } from "@/types/player";
 import type { StoredTokens } from "@/types/strava";
 import { decrypt, encrypt } from "./crypto";
 
@@ -9,22 +10,28 @@ import { decrypt, encrypt } from "./crypto";
  * Caching layer. Everything Strava-derived lives here so repeat page views and
  * README embeds never touch the Strava API.
  *
- * Keys (all prefixed `sfut:`):
- *   card:{athleteId}      PlayerCard JSON           TTL 30d (freshness judged by card.scoutedAt)
+ * Keys (all prefixed `kudex:`):
+ *   card:{athleteId}      owner's PlayerCard JSON   TTL 30d (freshness judged by card.scoutedAt)
+ *   card:{id}:{audience}  visitor cards (link, public; lib/audience.ts)  TTL 30d
+ *   meta:{athleteId}      every slug the athlete has had, for complete deletion  no TTL
  *   slug:{slug}           athleteId                 no TTL
  *   tokens:{athleteId}    AES-GCM encrypted tokens  no TTL
- *   lock:{athleteId}      scout-in-progress mutex   TTL 60s
+ *   lock:{athleteId}      scout-in-progress mutex (owner token)  TTL 150s
+ *   dirty:{athleteId}     webhook saw a change; next view rebuilds  TTL 7d
+ *   webhook-scout:{id}    debounce for webhook-triggered scouts      TTL 120s
  *   cooldown:{athleteId}  manual re-scout cooldown  TTL COOLDOWN
  *   budget                last seen Strava rate-limit usage
  *   cal:{athleteId}:{yr}  YearCalendar JSON         no TTL (past years never change)
  *   routes:{id}:{bucket}  RoutesByDay (shapes only) bucket = "recent" (rolling window) or a year
+ *   settings:{athleteId}  CardSettings (visibility, share token, section toggles)  no TTL
  */
 
-const PREFIX = "sfut:";
+const PREFIX = "kudex:";
 const CARD_TTL_SECONDS = 60 * 60 * 24 * 30;
 export const CARD_FRESH_MS = 1000 * 60 * 60 * 24; // 24h
 export const RESCOUT_COOLDOWN_SECONDS = 60 * 10;
-const LOCK_TTL_SECONDS = 60;
+/** Longer than the slowest scout (two passes of up to 5 calls with retries and 10 s timeouts). */
+const LOCK_TTL_SECONDS = 150;
 
 interface SetOptions {
   ex?: number;
@@ -97,25 +104,34 @@ class MemoryStore implements KVStore {
   }
 }
 
-const globalForStore = globalThis as unknown as { __sfutStore?: KVStore };
+const globalForStore = globalThis as unknown as { __kudexStore?: KVStore };
 
 function store(): KVStore {
-  if (globalForStore.__sfutStore) return globalForStore.__sfutStore;
+  if (globalForStore.__kudexStore) return globalForStore.__kudexStore;
   let instance: KVStore;
   if (env.redisUrl && env.redisToken) {
     instance = new UpstashStore(new Redis({ url: env.redisUrl, token: env.redisToken }));
   } else {
+    // Per-instance memory would silently break locks, the rate budget and every saved card.
     if (process.env.NODE_ENV === "production") {
-      console.warn("[strava-fut] No Redis configured — using in-memory cache. Data will not persist across instances.");
+      throw new Error("[kudex] Redis is required in production: set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN (or KV_REST_API_*).");
     }
     instance = new MemoryStore();
   }
-  globalForStore.__sfutStore = instance;
+  globalForStore.__kudexStore = instance;
   return instance;
 }
 
 const k = {
   card: (id: number) => `${PREFIX}card:${id}`,
+  /** Visitor versions of the card (lib/audience.ts); the owner's is `card`. */
+  cardView: (id: number, audience: VisitorAudience) => `${PREFIX}card:${id}:${audience}`,
+  /** Set by the webhook when an activity changes; forces the next view to re-scout. */
+  dirty: (id: number) => `${PREFIX}dirty:${id}`,
+  /** Debounce for webhook-triggered scouts. */
+  webhookScout: (id: number) => `${PREFIX}webhook-scout:${id}`,
+  /** Never expires: what we need to find every key of an athlete when deleting them, even after the card expired. */
+  meta: (id: number) => `${PREFIX}meta:${id}`,
   slug: (slug: string) => `${PREFIX}slug:${slug.toLowerCase()}`,
   tokens: (id: number) => `${PREFIX}tokens:${id}`,
   lock: (id: number) => `${PREFIX}lock:${id}`,
@@ -124,6 +140,7 @@ const k = {
   calendar: (id: number, year: number) => `${PREFIX}cal:${id}:${year}`,
   calendarLock: (id: number, year: number) => `${PREFIX}cal-lock:${id}:${year}`,
   routes: (id: number, bucket: RouteBucket) => `${PREFIX}routes:${id}:${bucket}`,
+  settings: (id: number) => `${PREFIX}settings:${id}`,
 };
 
 // ---------- Cards ----------
@@ -132,15 +149,59 @@ export async function getCachedCard(athleteId: number): Promise<PlayerCard | nul
   return store().get<PlayerCard>(k.card(athleteId));
 }
 
+/** Permanent per-athlete index so deletion finds every slug even after the card itself expired. */
+interface AthleteMeta {
+  slugs: string[];
+}
+
 export async function saveCard(card: PlayerCard, previousSlug?: string): Promise<void> {
   const s = store();
   await s.set(k.card(card.athleteId), card, { ex: CARD_TTL_SECONDS });
+  const meta = (await s.get<AthleteMeta>(k.meta(card.athleteId))) ?? { slugs: [] };
+  if (!meta.slugs.includes(card.slug.toLowerCase())) {
+    await s.set(k.meta(card.athleteId), { slugs: [...meta.slugs, card.slug.toLowerCase()] });
+  }
   await s.set(k.slug(card.slug), card.athleteId);
   // Keep numeric-id URLs working even when the athlete has a username.
   await s.set(k.slug(String(card.athleteId)), card.athleteId);
   if (previousSlug && previousSlug.toLowerCase() !== card.slug.toLowerCase()) {
     await s.del(k.slug(previousSlug));
   }
+}
+
+/** The card a visitor audience sees; null if it hasn't been built yet (e.g. cached before audiences existed). */
+export async function getCardView(athleteId: number, audience: VisitorAudience): Promise<PlayerCard | null> {
+  return store().get<PlayerCard>(k.cardView(athleteId, audience));
+}
+
+/** Saves every audience's card together, so visitors never see a mix of old and new. */
+export async function saveCardViews(cards: Record<"owner" | VisitorAudience, PlayerCard>, previousSlug?: string): Promise<void> {
+  const s = store();
+  await Promise.all(VISITOR_AUDIENCES.map((a) => s.set(k.cardView(cards.owner.athleteId, a), cards[a], { ex: CARD_TTL_SECONDS })));
+  // Owner card last: its presence (and freshness) is what the rest of the app keys off.
+  await saveCard(cards.owner, previousSlug);
+}
+
+export async function saveCardView(card: PlayerCard, audience: VisitorAudience): Promise<void> {
+  await store().set(k.cardView(card.athleteId, audience), card, { ex: CARD_TTL_SECONDS });
+}
+
+/** Webhook → "something changed on Strava; rebuild before trusting the cache". */
+/** At most one webhook-triggered scout per athlete per window; later events just leave the card dirty. */
+export async function claimWebhookScout(athleteId: number): Promise<boolean> {
+  return store().set(k.webhookScout(athleteId), 1, { ex: 120, nx: true });
+}
+
+export async function markDirty(athleteId: number): Promise<void> {
+  await store().set(k.dirty(athleteId), 1, { ex: 7 * 86_400 });
+}
+
+export async function isDirty(athleteId: number): Promise<boolean> {
+  return (await store().get(k.dirty(athleteId))) !== null;
+}
+
+export async function clearDirty(athleteId: number): Promise<void> {
+  await store().del(k.dirty(athleteId));
 }
 
 export async function resolveSlug(slug: string): Promise<number | null> {
@@ -175,28 +236,48 @@ export async function deleteTokens(athleteId: number): Promise<void> {
   await store().del(k.tokens(athleteId));
 }
 
-export async function deleteAthlete(athleteId: number, slug?: string, calendarYears: number[] = []): Promise<void> {
+/** Strava launched in 2009; sweeping every year since means no calendar or route bucket is missed. */
+const FIRST_STRAVA_YEAR = 2009;
+
+/**
+ * Removes every trace of an athlete: cards, tokens, settings, every slug they
+ * ever had, all calendar years and routes, and the bookkeeping keys. Works even
+ * when the card itself has expired, via the permanent meta index.
+ */
+export async function deleteAthlete(athleteId: number, slugs: string[] = []): Promise<void> {
+  const s = store();
+  const [settings, meta] = await Promise.all([getSettings(athleteId), s.get<AthleteMeta>(k.meta(athleteId))]);
+  const years = Array.from({ length: new Date().getUTCFullYear() + 1 - FIRST_STRAVA_YEAR + 1 }, (_, i) => FIRST_STRAVA_YEAR + i);
   const keys = [
     k.card(athleteId),
+    ...VISITOR_AUDIENCES.map((a) => k.cardView(athleteId, a)),
+    k.dirty(athleteId),
     k.tokens(athleteId),
+    k.settings(athleteId),
     k.slug(String(athleteId)),
     k.cooldown(athleteId),
-    ...calendarYears.flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]),
+    ...years.flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]),
     k.routes(athleteId, "recent"),
+    k.webhookScout(athleteId),
+    k.meta(athleteId),
+    ...[...slugs, ...(meta?.slugs ?? [])].map((slug) => k.slug(slug)),
   ];
-  if (slug) keys.push(k.slug(slug));
-  await store().del(...keys);
+  if (settings) keys.push(k.slug(settings.shareToken));
+  await s.del(...keys);
 }
 
 // ---------- Concurrency & rate-limit guards ----------
 
 /** Best-effort mutex so concurrent requests don't scout the same athlete twice. */
-export async function acquireScoutLock(athleteId: number): Promise<boolean> {
-  return store().set(k.lock(athleteId), Date.now(), { ex: LOCK_TTL_SECONDS, nx: true });
+/** Returns an ownership token when acquired, null if someone else holds the lock. */
+export async function acquireScoutLock(athleteId: number): Promise<string | null> {
+  const token = crypto.randomUUID();
+  return (await store().set(k.lock(athleteId), token, { ex: LOCK_TTL_SECONDS, nx: true })) ? token : null;
 }
 
-export async function releaseScoutLock(athleteId: number): Promise<void> {
-  await store().del(k.lock(athleteId));
+/** Releases only our own lock, so a scout that outlived its lock can't delete someone else's. */
+export async function releaseScoutLock(athleteId: number, token: string): Promise<void> {
+  if ((await store().get<string>(k.lock(athleteId))) === token) await store().del(k.lock(athleteId));
 }
 
 /** Starts the manual re-scout cooldown. Returns remaining seconds if already cooling down. */
@@ -254,4 +335,18 @@ export async function saveRoutes(athleteId: number, bucket: RouteBucket, routes:
 
 export async function getRoutes(athleteId: number, bucket: RouteBucket): Promise<RoutesByDay | null> {
   return store().get<RoutesByDay>(k.routes(athleteId, bucket));
+}
+
+// ---------- Privacy settings ----------
+
+export async function getSettings(athleteId: number): Promise<CardSettings | null> {
+  return store().get<CardSettings>(k.settings(athleteId));
+}
+
+/** Saves settings and keeps the share-token slug pointing at the athlete (dropping a replaced token). */
+export async function saveSettings(athleteId: number, settings: CardSettings, previousToken?: string): Promise<void> {
+  const s = store();
+  await s.set(k.settings(athleteId), settings);
+  await s.set(k.slug(settings.shareToken), athleteId);
+  if (previousToken && previousToken !== settings.shareToken) await s.del(k.slug(previousToken));
 }

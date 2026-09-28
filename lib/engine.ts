@@ -1,5 +1,5 @@
 /**
- * Strava-FUT rating engine.
+ * Kudex rating engine.
  *
  * Two pure stages, no I/O:
  *   1. extractInputs(): raw Strava payloads  -> ScoutInputs (sport-normalised facts)
@@ -9,10 +9,11 @@
  * saturates near 99 instead of compressing everyone else toward 1, while the
  * gap between "never" and "weekly" stays wide.
  *
- * Sport-aware: PAC, END and PWR are rated per sport against that sport's own
+ * Sport-aware: PAC and END are rated per sport against that sport's own
  * benchmarks (a swimmer is compared with swimmers), then blended by the share
  * of time the athlete spends on each sport. No cross-sport conversion ratios.
  */
+import { activitiesFor, activityLevel, privacyMix, type Audience } from "./audience";
 import {
   INPUTS_SCHEMA,
   type AttributeKey,
@@ -32,7 +33,7 @@ import { decodePolyline, routeShape } from "./polyline";
 import { awardTrophies } from "./trophies";
 
 /** Bump whenever formulas change — cached cards with an older version are re-rated. */
-export const ENGINE_VERSION = 3;
+export const ENGINE_VERSION = 6;
 
 export const WINDOW_DAYS = 365;
 const DAY_MS = 86_400_000;
@@ -129,27 +130,23 @@ interface SportBench {
   pace?: { types: Set<string>; minDistanceM: number; maxMps: number; floor: number; ceiling: number };
   /** Longest single session: by distance (km) for distance sports, by duration (h) otherwise. */
   longest: { unit: "km" | "h"; floor: number; ceiling: number };
-  /** Terrain sports: climb rate band (m per moving hour) and the m/km that makes a session "hilly". */
-  climb?: { rateFloor: number; rateCeiling: number; hillyMPerKm: number };
 }
 
 export const SPORT_BENCHMARKS: Record<SportFamily, SportBench> = {
   run: {
     pace: { types: new Set(["Run", "VirtualRun"]), minDistanceM: 1000, maxMps: 7, floor: 1.8, ceiling: 5.0 }, // ~9:15 → 3:20 /km
     longest: { unit: "km", floor: 3, ceiling: 100 },
-    climb: { rateFloor: 10, rateCeiling: 600, hillyMPerKm: 15 },
   },
   ride: {
     pace: { types: new Set(["Ride", "VirtualRide", "GravelRide"]), minDistanceM: 5000, maxMps: 20, floor: 4.2, ceiling: 11.5 }, // ~15 → 41 km/h
     longest: { unit: "km", floor: 10, ceiling: 320 },
-    climb: { rateFloor: 30, rateCeiling: 700, hillyMPerKm: 12 },
   },
   swim: {
     pace: { types: new Set(["Swim"]), minDistanceM: 200, maxMps: 2.5, floor: 0.5, ceiling: 1.45 }, // ~3:20 → 1:09 /100m
     longest: { unit: "km", floor: 0.4, ceiling: 10 },
   },
-  foot: { longest: { unit: "km", floor: 3, ceiling: 60 }, climb: { rateFloor: 50, rateCeiling: 600, hillyMPerKm: 40 } },
-  snow: { longest: { unit: "km", floor: 3, ceiling: 60 }, climb: { rateFloor: 50, rateCeiling: 800, hillyMPerKm: 30 } },
+  foot: { longest: { unit: "km", floor: 3, ceiling: 60 } },
+  snow: { longest: { unit: "km", floor: 3, ceiling: 60 } },
   water: { longest: { unit: "km", floor: 2, ceiling: 60 } },
   gym: { longest: { unit: "h", floor: 0.25, ceiling: 3 } },
   other: { longest: { unit: "h", floor: 0.25, ceiling: 4 } },
@@ -160,7 +157,6 @@ const RACE_RUN = 1;
 const RACE_RIDE = 11;
 
 const MIN_PACE_SAMPLES = 3;
-const MIN_HR_SAMPLES = 3;
 /** Pace-model fallback: if a runner has too few road runs, use all their runs (incl. trail). */
 const PACE_FALLBACK_TYPES: Partial<Record<SportFamily, Set<string>>> = {
   run: new Set(["Run", "VirtualRun", "TrailRun"]),
@@ -196,10 +192,6 @@ function paceFor(family: SportFamily, acts: StravaSummaryActivity[]): { mps: num
   return { mps: percentile(samples, 0.75), samples: samples.length };
 }
 
-function estimateMaxHr(acts: StravaSummaryActivity[]): number | null {
-  const maxima = acts.map((a) => a.max_heartrate ?? 0).filter((v) => v >= 120 && v <= 230);
-  return maxima.length >= MIN_HR_SAMPLES ? percentile(maxima, 0.98) : null;
-}
 
 /**
  * Location-free route shapes for every outdoor activity, keyed by local date.
@@ -222,6 +214,7 @@ export function routesByDay(acts: StravaSummaryActivity[]): RoutesByDay {
       movingTime: a.moving_time,
       prs: a.pr_count ?? 0,
       points,
+      level: activityLevel(a),
     });
   }
   return out;
@@ -276,7 +269,6 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
   const windowDays = truncated ? Math.max(30, Math.ceil((nowMs - oldest) / DAY_MS)) : WINDOW_DAYS;
   const annualise = WINDOW_DAYS / windowDays;
   const totalHours = acts.reduce((s, a) => s + a.moving_time, 0) / 3600;
-  const maxHeartRate = estimateMaxHr(acts);
 
   const byFamily = new Map<SportFamily, StravaSummaryActivity[]>();
   for (const a of acts) {
@@ -286,29 +278,8 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
 
   const sports: SportBreakdown[] = [...byFamily.entries()]
     .map(([family, list]) => {
-      const bench = SPORT_BENCHMARKS[family];
       const hours = list.reduce((s, a) => s + a.moving_time, 0) / 3600;
       const pace = paceFor(family, list);
-
-      let climbRateMPerH: number | null = null;
-      let hillyShare: number | null = null;
-      if (bench.climb) {
-        // Indoor sessions have no real terrain.
-        const outdoor = list.filter((a) => !a.trainer && a.distance > 500);
-        const outdoorHours = outdoor.reduce((s, a) => s + a.moving_time, 0) / 3600;
-        if (outdoor.length && outdoorHours > 0) {
-          climbRateMPerH = outdoor.reduce((s, a) => s + (a.total_elevation_gain || 0), 0) / outdoorHours;
-          hillyShare =
-            outdoor.filter((a) => (a.total_elevation_gain || 0) / (a.distance / 1000) >= bench.climb!.hillyMPerKm).length /
-            outdoor.length;
-        }
-      }
-
-      const withHr = maxHeartRate ? list.filter((a) => (a.average_heartrate ?? 0) > 60) : [];
-      const hrIntensity =
-        maxHeartRate && withHr.length >= MIN_HR_SAMPLES
-          ? withHr.reduce((s, a) => s + a.average_heartrate! / maxHeartRate, 0) / withHr.length
-          : null;
 
       return {
         family,
@@ -321,10 +292,7 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
         longestHours: round2(Math.max(0, ...list.map((a) => a.moving_time / 3600))),
         paceMps: pace ? round2(pace.mps) : null,
         paceSamples: pace?.samples ?? 0,
-        climbRateMPerH: climbRateMPerH === null ? null : Math.round(climbRateMPerH),
-        hillyShare: hillyShare === null ? null : round2(hillyShare),
-        hrIntensity: hrIntensity === null ? null : round2(hrIntensity),
-        hrSamples: withHr.length,
+        prs: list.reduce((sum, a) => sum + (a.pr_count ?? 0), 0),
       };
     })
     .sort((a, b) => b.hours - a.hours);
@@ -367,7 +335,6 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
     sports,
     windowHours: round1(totalHours * annualise),
     windowElevationM: Math.round(acts.reduce((s, a) => s + (a.total_elevation_gain || 0), 0) * annualise),
-    maxHeartRate: maxHeartRate === null ? null : Math.round(maxHeartRate),
     activeDaysLast30: activeDays.size,
     activeWeeksLast12: activeWeeks.size,
     lifetimeHours: Math.round(lifetimeHours),
@@ -378,7 +345,6 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
     hasTriathlonMix: recentTriMix && sessions("run") >= 2 && sessions("ride") >= 2 && sessions("swim") >= 2,
     daily: { endDate, minutes: series.minutes, prs: series.prs },
     prCount: series.prs.reduce((a, b) => a + b, 0),
-    achievementCount: acts.reduce((s, a) => s + (a.achievement_count ?? 0), 0),
     races,
   };
 }
@@ -388,16 +354,17 @@ export function extractInputs({ athlete, stats, activities, truncated }: RawScou
 const LABELS: Record<AttributeKey, string> = {
   PAC: "Pace",
   END: "Endurance",
-  PWR: "Power",
+  PRS: "Records",
   CONS: "Consistency",
   VAR: "Versatility",
   PHY: "Physicality",
 };
 
+/** PRS is the noisiest stat (it favours improving athletes), so it carries the least weight with VAR. */
 export const OVR_WEIGHTS: Record<AttributeKey, number> = {
-  PAC: 0.18,
-  END: 0.2,
-  PWR: 0.14,
+  PAC: 0.2,
+  END: 0.22,
+  PRS: 0.1,
   CONS: 0.18,
   VAR: 0.1,
   PHY: 0.2,
@@ -413,9 +380,6 @@ export const TIER_THRESHOLDS: { tier: CardTier; min: number }[] = [
   { tier: "bronze", min: 1 },
 ];
 
-/** Fallbacks when an athlete has no data at all for a stat. */
-const NO_PACE = 25;
-const NO_POWER = 30;
 
 const n0 = (n: number) => Math.round(n).toLocaleString("en-US");
 const fmtPerKm = (mps: number) => {
@@ -463,7 +427,7 @@ function ratePace(i: ScoutInputs): AttributeScore {
   });
   const value = blend(parts);
   if (value === null) {
-    return { key: "PAC", label: LABELS.PAC, value: NO_PACE, detail: "Not enough timed runs, rides or swims to measure pace" };
+    return { key: "PAC", label: LABELS.PAC, value: 1, measured: false, detail: "Not enough timed runs, rides or swims to measure pace" };
   }
   const text = parts.map(({ s }) =>
     s.family === "swim" ? `swim ${fmtPer100(s.paceMps!)}` : s.family === "ride" ? `ride ${(s.paceMps! * 3.6).toFixed(1)} km/h` : `run ${fmtPerKm(s.paceMps!)}`,
@@ -492,36 +456,38 @@ function rateEndurance(i: ScoutInputs): AttributeScore {
   };
 }
 
-/** Average HR as a share of max: 60% (easy) → 1, 92% (race effort) → 99. */
-const intensityScore = (ratio: number) => toRating((ratio - 0.6) / 0.32);
+/** Sports Strava awards PRs in: best efforts on runs, segment PRs on runs, rides and hikes. */
+export const PR_FAMILIES: ReadonlySet<SportFamily> = new Set<SportFamily>(["run", "ride", "foot"]);
+/** The same sports, in words. */
+export const PR_SPORTS_TEXT = "runs, rides and hikes";
 
-function ratePower(i: ScoutInputs): AttributeScore {
-  const notes: string[] = [];
-  const parts = countedSports(i).flatMap((s) => {
-    const climb = SPORT_BENCHMARKS[s.family].climb;
-    const hr = s.hrIntensity !== null ? intensityScore(s.hrIntensity) : null;
-    if (climb && s.climbRateMPerH !== null) {
-      // Terrain sports: how hard you climb (rate + how often), blended with HR effort when available
-      // so flat-course runners and riders aren't judged on hills alone.
-      const climbing = weighted([
-        [logScale(s.climbRateMPerH, climb.rateFloor, climb.rateCeiling), 0.65],
-        [toRating(s.hillyShare ?? 0), 0.35],
-      ]);
-      notes.push(`${SPORT_NAME[s.family]} ${n0(s.climbRateMPerH)} m/h`);
-      return [{ score: hr === null ? climbing : weighted([[climbing, 0.6], [hr, 0.4]]), share: s.share }];
-    }
-    if (hr !== null) {
-      // Flat sports (pool, gym, paddling): effort comes from heart rate instead of hills.
-      notes.push(`${SPORT_NAME[s.family]} ${Math.round(s.hrIntensity! * 100)}% max HR`);
-      return [{ score: hr, share: s.share }];
-    }
-    return [];
-  });
-  const value = blend(parts);
-  if (value === null) {
-    return { key: "PWR", label: LABELS.PWR, value: NO_POWER, detail: "No climbing or heart-rate data yet" };
+/** Hours and PRs across the sports Strava awards PRs in. */
+export function prTotals(i: Pick<ScoutInputs, "sports">): { hours: number; prs: number } {
+  const prSports = i.sports.filter((s) => PR_FAMILIES.has(s.family));
+  return { hours: prSports.reduce((sum, s) => sum + s.hours, 0), prs: prSports.reduce((sum, s) => sum + s.prs, 0) };
+}
+/** Hours of those sports needed before PRs are rated; fewer shows "–". */
+export const MIN_PR_HOURS = 10;
+/** Small samples are pulled toward a typical ~2 PRs per 10 h until there's enough to trust. */
+const PR_PRIOR = { per10: 2, hours: 10 };
+
+/**
+ * How often you beat your own best: PRs per 10 hours of runs, rides and hikes.
+ * Per hour, so training more doesn't win on its own; PRs from other sports
+ * don't count. 0.2 → 1, 2 → 50, 20 → 99 (log of the rate).
+ */
+function ratePRs(i: ScoutInputs): AttributeScore {
+  const { hours, prs } = prTotals(i);
+  if (hours < MIN_PR_HOURS) {
+    return { key: "PRS", label: LABELS.PRS, value: 1, measured: false, detail: `Needs ${MIN_PR_HOURS}+ hours of ${PR_SPORTS_TEXT}` };
   }
-  return { key: "PWR", label: LABELS.PWR, value, detail: `Effort: ${notes.join(" · ")} · ${n0(i.windowElevationM)} m climbed/yr` };
+  const per10 = ((prs + (PR_PRIOR.per10 / 10) * PR_PRIOR.hours) / (hours + PR_PRIOR.hours)) * 10;
+  return {
+    key: "PRS",
+    label: LABELS.PRS,
+    value: ratioScale(per10, 0.2, 20),
+    detail: `${n0(prs)} PRs in ${n0(hours)} h of ${PR_SPORTS_TEXT} · ${((prs / hours) * 10).toFixed(1)} per 10 h`,
+  };
 }
 
 function rateConsistency(i: ScoutInputs): AttributeScore {
@@ -586,7 +552,7 @@ const POSITION_BY_FAMILY: Record<SportFamily, string> = {
 const ARCHETYPES: Record<AttributeKey, string> = {
   PAC: "Speedster",
   END: "Diesel Engine",
-  PWR: "Mountain Goat",
+  PRS: "Record Breaker",
   CONS: "Metronome",
   VAR: "Swiss Army Knife",
   PHY: "Veteran Workhorse",
@@ -613,6 +579,9 @@ export function highlightFor(i: ScoutInputs, position: string): CardHighlight {
   }
 }
 
+/** False only for stats the athlete's sports give us no data for (shown as "–"). */
+export const isMeasured = (a: Pick<AttributeScore, "measured">) => a.measured !== false;
+
 export interface Rating {
   attributes: Record<AttributeKey, AttributeScore>;
   overall: number;
@@ -625,10 +594,12 @@ export interface Rating {
 }
 
 export function rateInputs(i: ScoutInputs): Rating {
-  const list = [ratePace(i), rateEndurance(i), ratePower(i), rateConsistency(i), rateVersatility(i), ratePhysicality(i)];
+  const list = [ratePace(i), rateEndurance(i), ratePRs(i), rateConsistency(i), rateVersatility(i), ratePhysicality(i)];
   const attributes = Object.fromEntries(list.map((a) => [a.key, a])) as Record<AttributeKey, AttributeScore>;
+  // Stats we couldn't measure sit out; `weighted` renormalises over the rest.
+  const measured = list.filter(isMeasured);
 
-  let overall = weighted(list.map((a) => [a.value, OVR_WEIGHTS[a.key]]));
+  let overall = weighted(measured.map((a) => [a.value, OVR_WEIGHTS[a.key]]));
   let legacyCapped = false;
   const legacyOk =
     i.tenureYears >= LEGACY_GATE.minTenureYears &&
@@ -640,7 +611,7 @@ export function rateInputs(i: ScoutInputs): Rating {
   }
   overall = clamp(overall, 1, 99);
 
-  const top = [...list].sort((a, b) => b.value - a.value)[0];
+  const top = [...measured].sort((a, b) => b.value - a.value)[0];
   const primary = i.sports[0]?.family;
   const position =
     i.hasTriathlonMix && attributes.VAR.value >= 70 ? "TRI" : primary ? POSITION_BY_FAMILY[primary] : "ATH";
@@ -659,8 +630,14 @@ export function rateInputs(i: ScoutInputs): Rating {
 
 // ---------- Card assembly ----------
 
+/** App paths a Strava username must never shadow; those athletes use their numeric id. */
+export const RESERVED_SLUGS = new Set(["guide", "privacy", "api", "settings", "login", "logout", "about", "admin", "help", "icon"]);
+
 export function slugFor(athlete: Pick<StravaAthlete, "id" | "username">): string {
-  return (athlete.username?.trim() || String(athlete.id)).toLowerCase();
+  const username = athlete.username?.trim().toLowerCase();
+  // Share-link tokens use the "link-" prefix, so usernames can't collide with them either.
+  if (!username || RESERVED_SLUGS.has(username) || username.startsWith("link-")) return String(athlete.id);
+  return username;
 }
 
 /** "Hanson Qin" → "HANSON Q." (Strava often exposes only a last initial anyway). */
@@ -692,6 +669,25 @@ export function buildCard(raw: RawScoutData, now = new Date()): PlayerCard {
     history: [{ date: now.toISOString().slice(0, 10), overall: rating.overall }],
     scoutedAt: now.toISOString(),
     engineVersion: ENGINE_VERSION,
+  };
+}
+
+export type AudienceCards = Record<Audience, PlayerCard>;
+
+/**
+ * One card per audience (lib/audience.ts), each built only from the activities
+ * that audience may see on Strava, with its own rating history. The owner card
+ * also records the privacy mix so the owner can see what visitors get.
+ * Lifetime totals come from Strava's stats endpoint, which only counts
+ * Everyone activities, so they're safe to share with every audience.
+ */
+export function buildAudienceCards(raw: RawScoutData, previous: Partial<AudienceCards>, now = new Date()): AudienceCards {
+  const build = (audience: Audience) =>
+    withHistory({ ...buildCard({ ...raw, activities: activitiesFor(raw.activities, audience) }, now), audience }, previous[audience] ?? null);
+  return {
+    owner: { ...build("owner"), privacy: privacyMix(raw.activities) },
+    link: build("link"),
+    public: build("public"),
   };
 }
 

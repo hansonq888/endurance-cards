@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { PlayerCard } from "@/types/player";
+import { TURTLE_ON_DARK, turtleDataUri } from "./turtle";
 import { CardFace } from "./card-face";
 import { CARD_H, CARD_W, PNG_SCALE, TIER_THEMES } from "./card-theme";
 
@@ -91,8 +92,8 @@ function storyBackdrop(card: PlayerCard): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
-/** 1080×1920 story image: the card on a grainy tier gradient with the wordmark and link. */
-export async function renderStoryPng(card: PlayerCard, host: string, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
+/** 1080×1920 story image: the card on a grainy tier gradient with the turtle and link. */
+export async function renderStoryPng(card: PlayerCard, link: string, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
   const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
   const t = TIER_THEMES[card.tier];
   return new ImageResponse(
@@ -100,6 +101,9 @@ export async function renderStoryPng(card: PlayerCard, host: string, init?: { he
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", color: "#ece6da" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={storyBackdrop(card)} alt="" width={STORY_W} height={STORY_H} style={{ position: "absolute", top: 0, left: 0 }} />
+        {/* The turtle, tucked into the top-left corner. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={turtleDataUri(TURTLE_ON_DARK, 150)} alt="" width={150} height={150} style={{ position: "absolute", top: 56, left: 56 }} />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 150 }}>
           <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 700, letterSpacing: 8, color: "#a89d92" }}>
             {`${t.label.toUpperCase()} · ${t.terrain.toUpperCase()}`}
@@ -110,12 +114,7 @@ export async function renderStoryPng(card: PlayerCard, host: string, init?: { he
           <CardFace card={card} u={(n) => n * STORY_SCALE} fonts={PNG_FONTS} avatarSrc={avatar} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 130 }}>
-          {/* Two flex items: the italic's overhang otherwise reads as a gap. */}
-          <div style={{ ...PNG_FONTS.display, display: "flex", fontSize: 52 }}>
-            <span>STRAVA</span>
-            <span style={{ color: "#fc4c02", marginLeft: -10 }}>-FUT</span>
-          </div>
-          <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 12 }}>{`${host}/${card.slug}`}</span>
+          <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 12 }}>{link}</span>
         </div>
       </div>
     ),

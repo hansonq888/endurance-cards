@@ -44,7 +44,13 @@ export interface AthleteProfile {
   sessions: SessionTemplate[];
   /** Weeks (counting back from now) with no activity — models time off. */
   restWeeks?: number[];
+  /** Share of runs/rides/swims that are workouts: ~15% faster than usual, half of them tagged on Strava. */
+  workoutShare?: number;
+  /** Extra PRs per run/ride/hike on average: how much of a segment and best-effort hunter they are. */
+  prHunting?: number;
 }
+
+const PR_SPORTS = new Set(["Run", "TrailRun", "Ride", "GravelRide", "MountainBikeRide", "Hike", "Walk"]);
 
 const TYPE_FOR: Record<string, string> = { TrailRun: "Run", VirtualRun: "Run", GravelRide: "Ride", VirtualRide: "Ride" };
 
@@ -111,7 +117,9 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
     for (const s of profile.sessions) {
       if (rand() > s.perWeek / 7) continue;
       const km = between(s.km);
-      const speed = between(s.speed);
+      // Workouts are picked from the activity id, not rand(), so the rest of the synthetic data doesn't shift.
+      const isWorkout = unit(id * 7919) < (profile.workoutShare ?? 0) && !s.minutes;
+      const speed = between(s.speed) * (isWorkout ? 1.15 : 1);
       // Mostly 6am–8pm, with the odd pre-dawn start (drives Dawn Patrol realistically).
       const dayStart = Math.floor((nowMs - day * DAY) / DAY) * DAY;
       const hour = rand() < 0.08 ? between([4.5, 6]) : between([6, 20]);
@@ -121,7 +129,10 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
       const family = s.type ?? TYPE_FOR[s.sport_type] ?? s.sport_type;
       const isRace = !!s.race && rand() < s.race && (family === "Run" || family === "Ride");
       // PRs cluster on races and hard days.
-      const prs = isRace ? 1 + Math.floor(rand() * 4) : rand() < 0.06 ? 1 + Math.floor(rand() * 2) : 0;
+      const basePrs = isRace ? 1 + Math.floor(rand() * 4) : rand() < 0.06 ? 1 + Math.floor(rand() * 2) : 0;
+      // Hash-based (not rand()) so the rest of the synthetic data doesn't shift.
+      const hunts = PR_SPORTS.has(s.sport_type) ? Math.floor((profile.prHunting ?? 0) * 2 * unit(id * 48_271) + unit(id * 69_621)) : 0;
+      const prs = basePrs + hunts;
       activities.push({
         id: id++,
         name: isRace ? `${Math.round(km)}K ${family === "Ride" ? "Road Race" : "Race"}` : s.sport_type,
@@ -136,10 +147,13 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
         average_speed: s.minutes ? 0 : speed,
         max_speed: s.minutes ? 0 : speed * 1.4,
         ...(avgHr ? { average_heartrate: avgHr, max_heartrate: avgHr + Math.round(between([15, 25])) } : {}),
-        workout_type: isRace ? (family === "Ride" ? 11 : 1) : null,
+        workout_type: isRace ? (family === "Ride" ? 11 : 1) : isWorkout && unit(id * 104_729) < 0.5 ? (family === "Ride" ? 12 : 3) : null,
         map: { id: `a${id}`, summary_polyline: TRACKED.has(s.sport_type) && km > 1 ? encodePolyline(syntheticTrack(rand, km)) : null },
         pr_count: prs,
         achievement_count: prs + (rand() < 0.2 ? 1 : 0),
+        // Like real athletes: mostly Everyone, some Followers and Only You (races are always shown).
+        // Derived from the id, not rand(), so the rest of the synthetic data doesn't shift.
+        ...visibilityFor(id, isRace),
       });
     }
   }
@@ -179,6 +193,8 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
 
 export const PROFILES = {
   casualJogger: {
+    prHunting: 0.3,
+    workoutShare: 0.02,
     seed: 11,
     tenureYears: 1,
     lifetimeHours: { run: 60, ride: 0, swim: 0 },
@@ -186,16 +202,20 @@ export const PROFILES = {
     restWeeks: [2, 3, 7, 8, 9, 15, 16, 20, 30, 31],
   },
   dedicatedRunner: {
+    prHunting: 0.1,
+    workoutShare: 0.03,
     seed: 22,
     tenureYears: 4,
-    lifetimeHours: { run: 1100, ride: 40, swim: 0 },
+    lifetimeHours: { run: 600, ride: 40, swim: 0 },
     sessions: [
-      { sport_type: "Run", perWeek: 5, km: [8, 16], speed: [3.2, 3.8], climb: [4, 10] },
+      { sport_type: "Run", perWeek: 4, km: [8, 16], speed: [3.0, 3.6], climb: [4, 10] },
       { sport_type: "Run", perWeek: 0.8, km: [22, 34], speed: [3.1, 3.4], climb: [5, 9], race: 0.12 },
       { sport_type: "WeightTraining", perWeek: 1, km: [0, 0], speed: [1, 1], climb: [0, 0], minutes: [40, 60] },
     ],
   },
   triathlete: {
+    prHunting: 0.3,
+    workoutShare: 0.18,
     seed: 33,
     tenureYears: 6,
     lifetimeHours: { run: 900, ride: 1400, swim: 400 },
@@ -206,6 +226,8 @@ export const PROFILES = {
     ],
   },
   eliteMountainRunner: {
+    prHunting: 1.4,
+    workoutShare: 0.32,
     seed: 44,
     tenureYears: 10,
     lifetimeHours: { run: 5200, ride: 300, swim: 0 },
@@ -218,12 +240,14 @@ export const PROFILES = {
     ],
   },
   poolSwimmer: {
+    workoutShare: 0.2,
     seed: 55,
     tenureYears: 3,
     lifetimeHours: { run: 0, ride: 0, swim: 700 },
     sessions: [{ sport_type: "Swim", perWeek: 5, km: [2.5, 5], speed: [1.15, 1.35], climb: [0, 0], hr: [135, 158] }],
   },
   gymGoer: {
+    workoutShare: 0,
     seed: 66,
     tenureYears: 2,
     lifetimeHours: { run: 20, ride: 0, swim: 0 },
@@ -233,3 +257,15 @@ export const PROFILES = {
     ],
   },
 } satisfies Record<string, AthleteProfile>;
+
+/** ~5% Only You, ~10% Followers, the rest Everyone. */
+function visibilityFor(id: number, isRace: boolean): Pick<StravaSummaryActivity, "visibility" | "private"> {
+  if (!isRace && id % 20 === 7) return { visibility: "only_me", private: true };
+  if (!isRace && id % 10 === 3) return { visibility: "followers_only", private: false };
+  return { visibility: "everyone", private: false };
+}
+
+/** Deterministic 0–1 hash of an integer. */
+function unit(n: number): number {
+  return (((n ^ (n >>> 13)) * 2_654_435_761) >>> 0) / 4_294_967_296;
+}

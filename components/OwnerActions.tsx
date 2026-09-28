@@ -39,26 +39,27 @@ export function OwnerActions({ slug }: { slug: string }) {
     }
   }
 
-  const btn = "flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 disabled:opacity-50";
+  // Quiet text buttons: these live at the bottom of the settings panel, not beside the share buttons.
+  const btn = "flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted transition-colors hover:text-foreground disabled:opacity-50";
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <button type="button" onClick={rescout} disabled={busy !== null} className={btn}>
-          <RefreshCw className={`h-4 w-4 ${busy === "rescout" ? "animate-spin" : ""}`} aria-hidden />
-          {busy === "rescout" ? "Scouting…" : "Re-scout"}
+          <RefreshCw className={`h-3.5 w-3.5 ${busy === "rescout" ? "animate-spin" : ""}`} aria-hidden />
+          {busy === "rescout" ? "Scouting…" : "Refresh now"}
         </button>
         <form action="/api/auth/logout" method="post">
           <button type="submit" className={btn}>
-            <LogOut className="h-4 w-4" aria-hidden /> Sign out
+            <LogOut className="h-3.5 w-3.5" aria-hidden /> Sign out
           </button>
         </form>
-        <button type="button" onClick={remove} disabled={busy !== null} className={`${btn} text-red-300`}>
-          <Trash2 className="h-4 w-4" aria-hidden /> Remove card
+        <button type="button" onClick={remove} disabled={busy !== null} className={`${btn} ml-auto !text-red-300/80 hover:!text-red-300`}>
+          <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove card
         </button>
       </div>
       {message && (
-        <p className="text-sm text-muted" role="status">
+        <p className="text-[11px] text-muted" role="status">
           {message}
         </p>
       )}

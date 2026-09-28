@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 const MAX_TILT = 10; // degrees
 const CARD_RADIUS = "5.333cqw"; // 16 design units on a 300-unit-wide card
@@ -14,10 +14,12 @@ const CARD_RADIUS = "5.333cqw"; // 16 design units on a 300-unit-wide card
 export function TiltCard({
   children,
   className = "",
+  style,
   holo,
 }: {
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
   /** Foil colours (CSS vars from holoVars()) to add a holographic sheen — Gold and Icon cards only. */
   holo?: Record<string, string>;
 }) {
@@ -61,7 +63,7 @@ export function TiltCard({
   }
 
   return (
-    <div className={`[container-type:inline-size] ${className}`} onPointerMove={move} onPointerLeave={leave}>
+    <div className={`[container-type:inline-size] ${className}`} style={style} onPointerMove={move} onPointerLeave={leave}>
       <div ref={tilt} className="relative will-change-transform [transform-style:preserve-3d]">
         {children}
         {holo && (

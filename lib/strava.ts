@@ -137,7 +137,7 @@ async function trackRateHeaders(res: Response): Promise<void> {
     dailyUsage: usage[1],
     at: Date.now(),
   };
-  await recordRateBudget(budget).catch((err) => console.warn("[strava-fut] failed to record rate budget", err));
+  await recordRateBudget(budget).catch((err) => console.warn("[kudex] failed to record rate budget", err));
 }
 
 // ---------- API client ----------

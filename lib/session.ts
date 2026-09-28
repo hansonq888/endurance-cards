@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { sign, unsign } from "./crypto";
 
-const SESSION_COOKIE = "sfut_session";
+const SESSION_COOKIE = "kudex_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 /** Marks the browser as belonging to a Strava athlete (enables re-scout / delete on their card). */

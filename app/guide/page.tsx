@@ -1,26 +1,36 @@
+import type { CSSProperties } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Wordmark } from "@/components/Wordmark";
 import { PlayerCard } from "@/components/PlayerCard";
-import { ScaleBar, STAT_ICONS } from "@/components/ScoutReport";
-import { SectionHeading } from "@/components/SectionHeading";
+import { StatEquation } from "@/components/StatEquation";
 import { TiltCard } from "@/components/TiltCard";
 import { TrophyBadge } from "@/components/TrophyBadge";
 import { holoVars, TIER_THEMES } from "@/lib/card-theme";
 import { buildCard, LEGACY_GATE, OVR_WEIGHTS, TIER_THRESHOLDS } from "@/lib/engine";
-import { RATING_BANDS, ratingWord, STAT_INPUTS, STAT_MEASURES } from "@/lib/explain";
+import { RATING_BANDS, STAT_DETAIL } from "@/lib/explain";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { formatValue, TROPHIES } from "@/lib/trophies";
 import { ATTRIBUTE_KEYS, type AttributeKey, type CardTier } from "@/types/player";
 
 export const metadata: Metadata = {
   title: "Guide",
-  description: "How Strava-FUT rates athletes: tiers, stats and every trophy.",
+  description: "How Kudex rates athletes: tiers, stats and every trophy.",
+};
+
+/** Four-to-five-word summaries for the guide. */
+const STAT_SHORT: Record<AttributeKey, string> = {
+  PAC: "How fast you go",
+  END: "How long you last",
+  PRS: "How often you beat your best",
+  CONS: "How often you show up",
+  VAR: "How many sports you do",
+  PHY: "How long you've been at it",
 };
 
 const STAT_NAMES: Record<AttributeKey, string> = {
   PAC: "Pace",
   END: "Endurance",
-  PWR: "Power",
+  PRS: "Records",
   CONS: "Consistency",
   VAR: "Versatility",
   PHY: "Physicality",
@@ -48,40 +58,63 @@ function tierRange(tier: CardTier) {
   return `${min}–${max}`;
 }
 
+/** The guide's three chapters, in order: numbered headers and anchors. */
+const CHAPTERS = [
+  { id: "tiers", title: "Tiers", intro: "Your overall decides the card you get. Four tiers, each with its own terrain." },
+  { id: "stats", title: "The six stats", intro: "Six stats, each rated 1–99 against people who do your sports, weighted into one overall." },
+  {
+    id: "trophies",
+    title: "Trophies",
+    intro: "Every trophy has three levels. Level I is within reach for regular athletes. Level III is rare, and it turns holographic.",
+  },
+] as const;
+
+/** A full-width chapter break: rule, big number, title and one line of intro. Rises in as it scrolls into view. */
+function Chapter({ n }: { n: 1 | 2 | 3 }) {
+  const c = CHAPTERS[n - 1];
+  return (
+    <header id={c.id} className="reveal mt-20 mb-10 scroll-mt-8 border-t border-line pt-10">
+      <div className="flex items-baseline gap-3">
+        <span className="display text-3xl leading-none text-strava tabular-nums sm:text-4xl">{String(n).padStart(2, "0")}</span>
+        <span className="display text-3xl leading-none text-muted sm:text-4xl" aria-hidden>
+          –
+        </span>
+        <h2 className="display text-3xl leading-none tracking-tight sm:text-4xl">{c.title}</h2>
+      </div>
+      <p className="mt-3 max-w-2xl font-accent text-xs leading-relaxed text-muted">{c.intro}</p>
+    </header>
+  );
+}
+
 export default function GuidePage() {
   const tiers = tierCards();
-  // Example values on each stat come from the Gold demo athlete.
-  const exampleCard = tiers.find((t) => t.tier === "gold")!.card;
   return (
     <main className="mx-auto w-full max-w-[1320px] flex-1 overflow-x-clip px-4 py-8 sm:py-12">
       <nav className="mb-10 flex items-center justify-between">
-        <Link href="/" className="display text-xl tracking-tight">
-          STRAVA<span className="text-strava">-FUT</span>
-        </Link>
+        <Wordmark />
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href="/api/auth/strava" className="text-sm font-semibold text-strava hover:underline">
           Get your card
         </a>
       </nav>
 
-      <header className="mb-12 max-w-2xl">
-        <h1 className="display text-5xl leading-[0.9] tracking-tight sm:text-6xl">
+      <header className="mb-4 max-w-2xl">
+        <h1 className="rise display text-5xl leading-[0.9] tracking-tight sm:text-6xl">
           How it <span className="text-strava">works</span>
         </h1>
-        <p className="mt-4 font-accent text-sm text-muted">
+        <p className="rise mt-4 font-accent text-sm text-muted" style={{ "--d": "120ms" } as CSSProperties}>
           Your card is rated from your last 12 months on Strava. Six stats, one overall, four tiers, and trophies that get
           much harder to level up.
         </p>
       </header>
 
-      {/* Tiers */}
-      <section className="mb-16">
-        <SectionHeading>Tiers</SectionHeading>
+      <Chapter n={1} />
+      <section className="pb-4">
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-          {tiers.map(({ tier, card }) => {
+          {tiers.map(({ tier, card }, i) => {
             const t = TIER_THEMES[tier];
             return (
-              <div key={tier} className="flex flex-col items-center">
+              <div key={tier} className="deal flex flex-col items-center" style={{ "--d": `${250 + i * 110}ms` } as CSSProperties}>
                 <TiltCard className="w-full max-w-[260px]" holo={t.holoCard ? holoVars(tier) : undefined}>
                   <PlayerCard card={card} className="w-full" />
                 </TiltCard>
@@ -94,7 +127,7 @@ export default function GuidePage() {
             );
           })}
         </div>
-        <p className="mt-10 max-w-3xl border-l-2 border-strava pl-4 font-accent text-xs leading-relaxed text-muted">
+        <p className="reveal mt-10 max-w-3xl border-l-2 border-strava pl-4 font-accent text-xs leading-relaxed text-muted">
           <span className="text-foreground">Icon (90+) is earned, not just scored.</span> You also need{" "}
           {LEGACY_GATE.minTenureYears}+ years on Strava, {LEGACY_GATE.minLifetimeHours.toLocaleString("en-US")}+ lifetime hours
           and {LEGACY_GATE.minActiveWeeksLast12} of the last 12 weeks active. Otherwise the overall stops at 89. Gold and Icon
@@ -102,83 +135,53 @@ export default function GuidePage() {
         </p>
       </section>
 
-      {/* Stats */}
-      <section className="mb-16">
-        <SectionHeading>The six stats</SectionHeading>
-        {/* How the overall is built: six stats, sized by weight. */}
-        <div className="mb-10 font-accent">
-          <p className="mb-2 text-[11px] uppercase tracking-wider text-muted">How your overall is built</p>
-          <div className="flex h-9 gap-0.5 overflow-hidden rounded-lg">
-            {ATTRIBUTE_KEYS.map((k, i) => (
-              <div
-                key={k}
-                className="flex items-center justify-center text-[11px] font-medium text-background"
-                style={{ flex: OVR_WEIGHTS[k], background: "var(--strava)", opacity: i % 2 ? 0.72 : 1 }}
-              >
-                {k} {Math.round(OVR_WEIGHTS[k] * 100)}%
-              </div>
-            ))}
-          </div>
-          <p className="mb-2 mt-6 text-[11px] uppercase tracking-wider text-muted">What the numbers mean</p>
-          <div className="flex gap-0.5">
-            {RATING_BANDS.map((b, i) => {
-              const next = RATING_BANDS[i + 1]?.min ?? 100;
+      <Chapter n={2} />
+      <section className="pb-4">
+        <StatEquation
+          items={ATTRIBUTE_KEYS.map((k) => ({
+            key: k,
+            name: STAT_NAMES[k],
+            short: STAT_SHORT[k],
+            weight: Math.round(OVR_WEIGHTS[k] * 100),
+            ...STAT_DETAIL[k],
+          }))}
+        />
+
+        {/* Separate scale: how to read any single stat. */}
+        <div className="reveal mt-14 font-accent">
+          <p className="mb-5 text-[11px] uppercase tracking-wider text-muted">Every stat · 1–99</p>
+          <div className="relative mx-2 h-12">
+            <div
+              className="absolute inset-x-0 top-5 h-px"
+              style={{ background: "linear-gradient(90deg, color-mix(in srgb, var(--strava) 25%, transparent), var(--strava))" }}
+            />
+            {[...RATING_BANDS.map((b) => b.min), 99].map((n, i) => {
+              const left = `${((n - 1) / 98) * 100}%`;
+              const band = RATING_BANDS[i];
+              const nextMin = RATING_BANDS[i + 1]?.min ?? 99;
               return (
-                <div key={b.word} style={{ flex: next - b.min }}>
-                  <div className="h-1.5 rounded-full bg-strava" style={{ opacity: 0.25 + i * 0.19 }} />
-                  <p className="mt-1.5 text-[11px]">{b.word}</p>
-                  <p className="text-[10px] text-muted tabular-nums">{b.min}+</p>
+                <div key={n}>
+                  <div className="absolute top-0 -translate-x-1/2 text-[10px] text-muted tabular-nums" style={{ left }}>
+                    {n}
+                  </div>
+                  <div className="absolute top-3.5 h-3 w-px -translate-x-1/2 bg-foreground/50" style={{ left }} />
+                  {band && (
+                    <div className="absolute top-8 text-center text-[11px]" style={{ left, width: `${((nextMin - band.min) / 98) * 100}%` }}>
+                      {band.word}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
-
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-          {ATTRIBUTE_KEYS.map((k) => {
-            const Icon = STAT_ICONS[k];
-            const example = exampleCard.attributes[k].value;
-            return (
-              <li key={k} className="font-accent">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2">
-                    <Icon className="h-4.5 w-4.5 text-strava" aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="display text-lg leading-none">{STAT_NAMES[k]}</p>
-                    <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
-                      {k} · {Math.round(OVR_WEIGHTS[k] * 100)}% of overall
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs">{STAT_MEASURES[k]}.</p>
-                <p className="mt-1 text-[11px] text-muted">{STAT_INPUTS[k]}.</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <ScaleBar value={example} className="h-1.5 flex-1" />
-                  <span className="text-[11px] text-muted tabular-nums">
-                    e.g. <span className="text-foreground">{example}</span> · {ratingWord(example)}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mt-4 font-accent text-xs text-muted">
-          Every sport is rated against people who do that sport, then blended by how much time you spend on it. A swimmer is
-          compared with swimmers, never converted into “running kilometres”.
-        </p>
       </section>
 
-      {/* Trophies */}
-      <section className="mb-8" style={holoVars("gold")}>
-        <SectionHeading>Trophies</SectionHeading>
-        <p className="mb-6 font-accent text-xs text-muted">
-          Every trophy has three levels. Level I is within reach for regular athletes. Level III is rare, and it turns
-          holographic.
-        </p>
+      <Chapter n={3} />
+      <section className="pb-4" style={holoVars("gold")}>
         <ul className="grid grid-cols-1 gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {TROPHIES.map((def) => (
-            <li key={def.id} className="font-accent">
+            <li key={def.id} className="reveal font-accent">
               <p className="display text-lg leading-none">{def.name}</p>
               <p className="mt-1 text-[11px] text-muted">{def.measure}</p>
               {/* Level progression: I → II → III on a thin track. */}
@@ -209,7 +212,7 @@ export default function GuidePage() {
         </ul>
       </section>
 
-      <footer className="mt-12 text-center text-xs text-muted">Powered by Strava · Not affiliated with EA Sports or Strava</footer>
+      <footer className="mt-12 text-center text-xs text-muted">Powered by Strava · Not affiliated with Strava</footer>
     </main>
   );
 }

@@ -7,7 +7,7 @@ import { scoutAthlete } from "@/lib/scout";
 import { setSession } from "@/lib/session";
 import { buildAuthorizeUrl, exchangeCode } from "@/lib/strava";
 
-const STATE_COOKIE = "sfut_oauth_state";
+const STATE_COOKIE = "kudex_oauth_state";
 
 function origin(req: NextRequest) {
   return env.appUrl ?? req.nextUrl.origin;
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   try {
     return await handle(req);
   } catch (err) {
-    console.error("[strava-fut] OAuth callback failed", err);
+    console.error("[kudex] OAuth callback failed", err);
     if (err instanceof RateLimitError) return home(req, "rate_limited");
     return home(req, err instanceof AppError ? err.code : "internal");
   }
@@ -69,6 +69,7 @@ async function handle(req: NextRequest) {
     scope: granted.join(","),
   });
   await setSession(athleteId);
+  // First scout also picks the starting visibility from their Strava privacy (existing choices are kept).
   const card = await scoutAthlete(athleteId);
 
   const res = NextResponse.redirect(new URL(`/${encodeURIComponent(card.slug)}`, origin(req)));

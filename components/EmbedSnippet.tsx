@@ -1,13 +1,14 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
+import { BRAND } from "@/lib/brand";
 import { useState } from "react";
 import { SectionHeading } from "./SectionHeading";
 
 export function EmbedSnippet({ pageUrl, imageUrl, name }: { pageUrl: string; imageUrl: string; name: string }) {
   const snippets = [
-    { label: "Markdown", value: `[![${name}'s Strava-FUT card](${imageUrl})](${pageUrl})` },
-    { label: "HTML", value: `<a href="${pageUrl}"><img src="${imageUrl}" alt="${name}'s Strava-FUT card" width="300"></a>` },
+    { label: "Markdown", value: `[![${name}'s ${BRAND.name} card](${imageUrl})](${pageUrl})` },
+    { label: "HTML", value: `<a href="${pageUrl}"><img src="${imageUrl}" alt="${name}'s ${BRAND.name} card" width="300"></a>` },
     { label: "Image URL", value: imageUrl },
   ];
   const [copied, setCopied] = useState<string | null>(null);
