@@ -648,11 +648,15 @@ export function displayNameFor(athlete: Pick<StravaAthlete, "firstname" | "lastn
   return (lastInitial ? `${first} ${lastInitial}.` : first).toUpperCase();
 }
 
+/** A bundled demo-card photo path, e.g. "/demo-avatars/fox.jpg". */
+export const isDemoAvatar = (url: string | null | undefined): url is string => !!url && /^\/demo-avatars\/[a-z-]+\.jpg$/.test(url);
+
 export function buildCard(raw: RawScoutData, now = new Date()): PlayerCard {
   const { athlete } = raw;
   const inputs = extractInputs(raw, now);
   const rating = rateInputs(inputs);
-  const avatar = athlete.profile?.startsWith("http") ? athlete.profile : null;
+  // Strava photo URLs; demo athletes use bundled photos (public/demo-avatars). Strava's placeholder paths are dropped.
+  const avatar = athlete.profile?.startsWith("http") || isDemoAvatar(athlete.profile) ? athlete.profile : null;
   const location = [athlete.city, athlete.state].filter(Boolean).join(", ") || null;
 
   return {
