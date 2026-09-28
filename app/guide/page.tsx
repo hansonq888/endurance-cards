@@ -74,8 +74,11 @@ function Chapter({ n }: { n: 1 | 2 | 3 }) {
   const c = CHAPTERS[n - 1];
   return (
     <header id={c.id} className="reveal mt-20 mb-10 scroll-mt-8 border-t border-line pt-10">
-      <div className="flex items-baseline gap-4">
+      <div className="flex items-baseline gap-3">
         <span className="display text-3xl leading-none text-strava tabular-nums sm:text-4xl">{String(n).padStart(2, "0")}</span>
+        <span className="display text-3xl leading-none text-muted sm:text-4xl" aria-hidden>
+          –
+        </span>
         <h2 className="display text-3xl leading-none tracking-tight sm:text-4xl">{c.title}</h2>
       </div>
       <p className="mt-3 max-w-2xl font-accent text-xs leading-relaxed text-muted">{c.intro}</p>
