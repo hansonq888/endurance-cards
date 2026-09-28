@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BRAND } from "@/lib/brand";
 import { Geist, Geist_Mono, Mona_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/** Poster-style display face for headlines and the wordmark. */
+/** Poster-style display face for headlines. */
 const monaSans = Mona_Sans({
   variable: "--font-display",
   subsets: ["latin"],
@@ -32,8 +33,8 @@ const barlow = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Strava-FUT — Endurance Player Cards", template: "%s · Strava-FUT" },
-  description: "Turn your Strava history into an Ultimate Team–style player card rated out of 99.",
+  title: { default: `${BRAND.name} — ${BRAND.tagline}`, template: `%s · ${BRAND.name}` },
+  description: "Turn your Strava history into a player card rated out of 99.",
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
 };
 

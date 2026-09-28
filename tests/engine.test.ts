@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCard, displayNameFor, routesByDay, withHistory, RATING_HISTORY_MAX, extractInputs, logScale, ratioScale, rateInputs, rerateCard, slugFor, tierFor } from "@/lib/engine";
+import { OVR_WEIGHTS, buildCard, displayNameFor, routesByDay, withHistory, RATING_HISTORY_MAX, extractInputs, logScale, ratioScale, rateInputs, rerateCard, slugFor, tierFor } from "@/lib/engine";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { decodePolyline, encodePolyline, routeShape } from "@/lib/polyline";
 import { levelFor, TROPHIES, trophyProgress } from "@/lib/trophies";
@@ -50,7 +50,7 @@ describe("rating engine", () => {
     expect(runner.overall).toBeGreaterThan(casual.overall);
     expect(elite.overall).toBeGreaterThan(runner.overall);
     expect(casual.tier).toBe("bronze");
-    expect(elite.attributes.PWR.value).toBeGreaterThan(runner.attributes.PWR.value);
+    expect(runner.attributes.PRS.measured).not.toBe(false);
   });
 
   it("rewards multi-sport athletes on VAR", () => {
@@ -62,23 +62,22 @@ describe("rating engine", () => {
     expect(tri.trophies.map((t) => t.id)).toContain("triathlete");
   });
 
-  it("rates swimmers against swimmers, with heart rate standing in for climbing", () => {
+  it("rates swimmers against swimmers, and doesn't hold missing PRs against them", () => {
     const swimmer = card("poolSwimmer");
     expect(swimmer.position).toBe("SWM");
     // ~1:20/100m upper quartile is quick for a swimmer.
     expect(swimmer.attributes.PAC.value).toBeGreaterThanOrEqual(70);
-    // Flat pool, but real effort: Power must not collapse to the no-data floor.
-    expect(swimmer.attributes.PWR.value).toBeGreaterThan(40);
-    expect(swimmer.attributes.PWR.detail).toContain("max HR");
+    // Strava doesn't award swim PRs: not measured, so it sits out of the overall.
+    expect(swimmer.attributes.PRS.measured).toBe(false);
     expect(swimmer.highlight.label).toBe("SWUM / YR");
   });
 
-  it("gives gym-goers heart-rate power and hours as their highlight", () => {
+  it("gives gym-goers hours as their highlight, and only counts PRs from their runs", () => {
     const gym = card("gymGoer");
     expect(gym.position).toBe("GYM");
-    // Lifting at ~66% max HR is honest, low cardio effort — but it is measured, not the no-data floor.
-    expect(gym.attributes.PWR.detail).toContain("gym");
-    expect(gym.attributes.PWR.detail).toContain("max HR");
+    const runPrs = gym.inputs.sports.find((s) => s.family === "run")?.prs ?? 0;
+    expect(gym.attributes.PRS.detail).toContain(`${runPrs} PRs`);
+    expect(gym.attributes.PRS.value).toBeLessThan(90);
     expect(gym.highlight).toMatchObject({ label: "TRAINED / YR", climb: false });
   });
 
@@ -96,7 +95,7 @@ describe("rating engine", () => {
       activeWeeksLast12: 12,
       lifetimeHours: 9000,
       tenureYears: 12,
-      sports: inputs.sports.map((s) => ({ ...s, paceMps: s.paceMps ? 6 : null, longestKm: 500, longestHours: 20, climbRateMPerH: s.climbRateMPerH === null ? null : 2000, hillyShare: s.hillyShare === null ? null : 1 })),
+      sports: inputs.sports.map((s) => ({ ...s, paceMps: s.paceMps ? 6 : null, longestKm: 500, longestHours: 20, prs: s.hours * 5 })),
     };
     expect(rateInputs(maxed).overall).toBeGreaterThanOrEqual(90);
     // Maxed everywhere but only 8/12 recent weeks active: still 90+ raw, but fails the gate.
@@ -110,9 +109,41 @@ describe("rating engine", () => {
     const c = buildCard(raw, NOW);
     expect(c.inputs.activityCount).toBe(0);
     expect(c.attributes.VAR.value).toBe(1);
-    expect(c.attributes.PAC.value).toBe(25);
-    expect(c.attributes.PWR.value).toBe(30);
+    expect(c.attributes.PAC.measured).toBe(false);
+    expect(c.attributes.PRS.measured).toBe(false);
     expect(c.tier).toBe("bronze");
+  });
+
+  it("leaves unmeasured stats out of the overall", () => {
+    const swimmer = card("poolSwimmer");
+    expect(swimmer.attributes.PRS.measured).toBe(false);
+    const measured = ATTRIBUTE_KEYS.filter((k) => swimmer.attributes[k].measured !== false);
+    const total = measured.reduce((s, k) => s + OVR_WEIGHTS[k], 0);
+    expect(swimmer.overall).toBe(Math.round(measured.reduce((s, k) => s + swimmer.attributes[k].value * OVR_WEIGHTS[k], 0) / total));
+    expect(swimmer.archetype).not.toBe("Record Breaker");
+  });
+
+  it("rates PRs per hour of runs, rides and hikes, with small samples pulled to the middle", () => {
+    const inputs = extractInputs(syntheticAthlete(PROFILES.dedicatedRunner, NOW), NOW);
+    const withRuns = (prs: number, hours: number): ScoutInputs => ({
+      ...inputs,
+      sports: inputs.sports.map((s) => (s.family === "run" ? { ...s, prs, hours } : s)),
+    });
+    const prs = (i: ScoutInputs) => rateInputs(i).attributes.PRS;
+    // Same rate at double the volume: no reward for volume alone.
+    expect(prs(withRuns(100, 400)).value).toBe(prs(withRuns(200, 800)).value);
+    expect(prs(withRuns(300, 400)).value).toBeGreaterThan(prs(withRuns(100, 400)).value);
+    // 12 PRs in 12 h is a hot streak, but too little to be sure: pulled well below the long-run equivalent.
+    expect(prs(withRuns(12, 12)).value).toBeLessThan(prs(withRuns(400, 400)).value);
+    // Under 10 h of PR sports there's nothing to judge.
+    expect(prs({ ...inputs, sports: [{ ...inputs.sports.find((s) => s.family === "run")!, hours: 8, prs: 5 }] }).measured).toBe(false);
+  });
+
+  it("ignores PRs from sports Strava doesn't award them in", () => {
+    const inputs = extractInputs(syntheticAthlete(PROFILES.gymGoer, NOW), NOW);
+    const base = rateInputs(inputs).attributes.PRS.value;
+    const noisyGym = { ...inputs, sports: inputs.sports.map((s) => (s.family === "gym" ? { ...s, prs: 500 } : s)) };
+    expect(rateInputs(noisyGym).attributes.PRS.value).toBe(base);
   });
 
   it("annualises volume when the fetch was truncated", () => {

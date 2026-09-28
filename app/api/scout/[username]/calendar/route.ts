@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { parsePreview } from "@/lib/access";
 import { getCalendarYear } from "@/lib/calendar";
 import { errorResponse } from "@/lib/errors";
 import { getSessionAthleteId } from "@/lib/session";
@@ -9,8 +10,10 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/scout/[usern
   const year = Number(req.nextUrl.searchParams.get("year"));
   if (!Number.isInteger(year)) return Response.json({ error: "bad_request", message: "year is required" }, { status: 400 });
   try {
-    const cal = await getCalendarYear(username, year, await getSessionAthleteId());
-    // Finished years never change, so let browsers and CDNs keep them.
+    const cal = await getCalendarYear(username, year, await getSessionAthleteId(), {
+      preview: parsePreview(req.nextUrl.searchParams.get("view")),
+    });
+    // Finished years never change; browsers may keep them (private: the response depends on who's asking).
     return Response.json(cal, { headers: { "Cache-Control": "private, max-age=3600" } });
   } catch (err) {
     return errorResponse(err);

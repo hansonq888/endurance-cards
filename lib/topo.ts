@@ -75,16 +75,27 @@ function smooth(pts: readonly (readonly [number, number])[]): string {
 export interface RidgePoint {
   key: AttributeKey;
   value: number;
+  /** False for a stat we couldn't measure: labelled "–", and the ridge passes smoothly over it. */
+  measured: boolean;
   /** Card coordinates of the ridge vertex. */
   x: number;
   y: number;
 }
 
 export function ridgePoints(card: PlayerCard): RidgePoint[] {
+  const measured = ATTRIBUTE_KEYS.map((k) => card.attributes[k].measured !== false);
+  const values = ATTRIBUTE_KEYS.map((k) => card.attributes[k].value);
   return ATTRIBUTE_KEYS.map((key, i) => {
-    const value = card.attributes[key].value;
-    return { key, value, x: 18 + i * 52.8, y: RIDGE_TOP + 190 - value * 1.55 };
+    // An unmeasured stat mustn't read as a deep valley: draw it level with its measured neighbours.
+    const height = measured[i] ? values[i] : neighbourAverage(values, measured, i);
+    return { key, value: values[i], measured: measured[i], x: 18 + i * 52.8, y: RIDGE_TOP + 190 - height * 1.55 };
   });
+}
+
+function neighbourAverage(values: number[], measured: boolean[], i: number): number {
+  const near = [i - 1, i + 1].filter((j) => j >= 0 && j < values.length && measured[j]).map((j) => values[j]);
+  const pool = near.length ? near : values.filter((_, j) => measured[j]);
+  return pool.length ? pool.reduce((s, v) => s + v, 0) / pool.length : 50;
 }
 
 /** Full background artwork (contours, knock-outs, ridge, photo ring) as a standalone SVG string. */
@@ -107,9 +118,12 @@ export function cardArtSvg(card: PlayerCard): string {
     .join("");
   const ticks = local
     .map(
-      ([x, y]) =>
+      ([x, y], i) =>
         `<line x1="${x}" x2="${x}" y1="${y + 6}" y2="${RIDGE_BASE}" stroke="${t.ink}" stroke-opacity="0.15"/>` +
-        `<circle cx="${x}" cy="${y}" r="3.5" fill="${t.bg}" stroke="${accent}" stroke-width="2"/>`,
+        // Unmeasured stats get a faint dashed marker instead of a solid point.
+        (pts[i].measured
+          ? `<circle cx="${x}" cy="${y}" r="3.5" fill="${t.bg}" stroke="${accent}" stroke-width="2"/>`
+          : `<circle cx="${x}" cy="${y}" r="3.5" fill="${t.bg}" stroke="${t.ink}" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="2 2"/>`),
     )
     .join("");
   const stops = (colors: readonly string[], opacity = 1) =>

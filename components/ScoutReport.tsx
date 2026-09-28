@@ -1,24 +1,16 @@
-import { Flame, Gauge, Layers, Mountain, Timer, Zap, type LucideIcon } from "lucide-react";
-import { OVR_WEIGHTS } from "@/lib/engine";
+import { isMeasured, OVR_WEIGHTS } from "@/lib/engine";
 import { holoVars } from "@/lib/card-theme";
 import { explainStat, ratingWord } from "@/lib/explain";
 import { formatValue, LEVEL_NUMERALS, TROPHIES, trophyProgress } from "@/lib/trophies";
-import { ATTRIBUTE_KEYS, type AttributeKey, type PlayerCard } from "@/types/player";
+import { ATTRIBUTE_KEYS, type PlayerCard } from "@/types/player";
 import { SectionHeading } from "./SectionHeading";
+import { STAT_ICONS } from "./StatIcons";
 import { SportDonut } from "./SportDonut";
 import { TrophyBadges, type BadgeItem } from "./TrophyBadges";
 
 /** Panel container shared by the sections around the card. */
 export const PANEL = "grain rounded-2xl border border-line p-5";
 
-export const STAT_ICONS: Record<AttributeKey, LucideIcon> = {
-  PAC: Gauge,
-  END: Timer,
-  PWR: Mountain,
-  CONS: Flame,
-  VAR: Layers,
-  PHY: Zap,
-};
 
 /** Map-style scale bar: orange fill with tick marks every 25. */
 export function ScaleBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
@@ -42,6 +34,7 @@ export function StatBreakdown({ card }: { card: PlayerCard }) {
       <ul className="divide-y divide-line">
         {ATTRIBUTE_KEYS.map((key) => {
           const a = card.attributes[key];
+          const measured = isMeasured(a);
           const Icon = STAT_ICONS[key];
           const { measures, facts, headline } = explainStat(card, key);
           const more = facts.filter((f) => f !== headline);
@@ -50,19 +43,28 @@ export function StatBreakdown({ card }: { card: PlayerCard }) {
               {/* Compact by default; click a stat for what it measures and the rest of its facts. */}
               <details className="group py-3">
                 <summary className="cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
-                  <div className="mb-1.5 flex items-baseline gap-2">
-                    <span className="w-9 shrink-0 text-2xl font-medium leading-none tabular-nums">{a.value}</span>
-                    <Icon className="h-3.5 w-3.5 shrink-0 self-center text-strava" aria-hidden />
-                    <span className="text-xs font-medium uppercase tracking-wider">{a.label}</span>
-                    <span className="ml-auto text-[11px] uppercase tracking-wider text-strava">{ratingWord(a.value)}</span>
-                    <span className="w-3 text-center text-muted transition-transform group-open:rotate-90" aria-hidden>
-                      ›
+                  {/* The number sits in its own column, vertically centred on the label + bar. */}
+                  <div className="flex items-center gap-2">
+                    <span className={`w-9 shrink-0 text-2xl font-medium leading-none tabular-nums ${measured ? "" : "text-muted"}`}>
+                      {measured ? a.value : "–"}
                     </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-strava" aria-hidden />
+                        <span className="text-xs font-medium uppercase tracking-wider">{a.label}</span>
+                        <span className={`ml-auto text-[11px] uppercase tracking-wider ${measured ? "text-strava" : "text-muted"}`}>
+                          {measured ? ratingWord(a.value) : "Not measured"}
+                        </span>
+                        <span className="w-3 text-center text-muted transition-transform group-open:rotate-90" aria-hidden>
+                          ›
+                        </span>
+                      </div>
+                      <div className="pr-5">
+                        <ScaleBar value={measured ? a.value : 0} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="pl-11 pr-5">
-                    <ScaleBar value={a.value} />
-                    <p className="mt-1.5 truncate text-[11px] text-muted group-open:hidden">{headline}</p>
-                  </div>
+                  <p className="mt-1.5 truncate pl-11 pr-5 text-[11px] text-muted group-open:hidden">{headline}</p>
                 </summary>
                 <div className="pl-11 pr-5 pt-1.5 text-[11px] leading-relaxed">
                   <p className="text-muted">{measures}</p>
@@ -87,7 +89,7 @@ export function StatBreakdown({ card }: { card: PlayerCard }) {
           <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span>How is the overall calculated?
         </summary>
         <p className="mt-2 leading-relaxed">
-          Your overall is a weighted average:{" "}
+          Your overall is a weighted average (stats marked “–” can&apos;t be measured from your sports, so they sit out):{" "}
           {ATTRIBUTE_KEYS.map((k) => `${card.attributes[k].label} ${Math.round(OVR_WEIGHTS[k] * 100)}%`).join(", ")}. Each sport is
           rated against people who do that sport, then blended by how much time you spend on it. 90+ (Icon) needs 3+ years on
           Strava, 1,500+ lifetime hours and 9 of the last 12 weeks active.
@@ -176,9 +178,26 @@ export function SportMix({ card }: { card: PlayerCard }) {
 }
 
 /** Overall across past scouts: sparkline plus change since the first point. Centred under the card. */
-export function RatingTrend({ card, className = "" }: { card: PlayerCard; className?: string }) {
+export function RatingTrend({
+  card,
+  className = "",
+  style,
+  isOwner = false,
+}: {
+  card: PlayerCard;
+  className?: string;
+  style?: React.CSSProperties;
+  /** Owners get a note while there's only one day of history, so the trend doesn't just silently vanish. */
+  isOwner?: boolean;
+}) {
   const h = card.history ?? [];
-  if (h.length < 2) return null;
+  if (h.length < 2) {
+    return isOwner ? (
+      <p className={`text-center font-accent text-[11px] text-muted ${className}`} style={style}>
+        Your rating trend starts tomorrow: we save one rating a day.
+      </p>
+    ) : null;
+  }
   const first = h[0];
   const delta = card.overall - first.overall;
   const lo = Math.min(...h.map((p) => p.overall)) - 1;
@@ -188,7 +207,7 @@ export function RatingTrend({ card, className = "" }: { card: PlayerCard; classN
   const pts = h.map((p, i) => [(i / (h.length - 1)) * W, H - ((p.overall - lo) / (hi - lo)) * H] as const);
   const since = new Date(`${first.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
   return (
-    <div className={`flex items-center justify-center gap-3 font-accent ${className}`}>
+    <div className={`flex items-center justify-center gap-3 font-accent ${className}`} style={style}>
       <svg viewBox={`-3 -3 ${W + 6} ${H + 6}`} className="h-7 w-28 shrink-0 overflow-visible" role="img" aria-label={`Overall rating over ${h.length} scouts`}>
         <polyline points={pts.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--strava)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r={3} fill="var(--strava)" stroke="var(--background)" strokeWidth={1.5} />

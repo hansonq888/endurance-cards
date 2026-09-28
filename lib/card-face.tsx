@@ -137,7 +137,7 @@ export function CardFace({ card, u, fonts, avatarSrc }: CardFaceProps) {
               ...halo,
             }}
           >
-            {p.value}
+            {p.measured ? p.value : "–"}
           </span>
           <span
             style={small(9.5, 700, {

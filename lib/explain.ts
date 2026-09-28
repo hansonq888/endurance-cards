@@ -2,6 +2,7 @@
  * Plain-English explanations of a card's stats for the scout report. Pure and
  * presentation-only: the engine's `detail` strings stay as the terse API form.
  */
+import { MIN_PR_HOURS, PR_SPORTS_TEXT, prTotals } from "./engine";
 import type { AttributeKey, PlayerCard, SportBreakdown, SportFamily } from "@/types/player";
 
 export interface StatExplanation {
@@ -27,21 +28,11 @@ export function ratingWord(value: number): string {
   return [...RATING_BANDS].reverse().find((b) => value >= b.min)?.word ?? "Building";
 }
 
-/** What feeds each stat, in plain words (guide). */
-export const STAT_INPUTS: Record<AttributeKey, string> = {
-  PAC: "Your faster runs, rides and swims, each judged against that sport",
-  END: "Longest session per sport, plus total hours this year",
-  PWR: "Climbing on runs, rides and hikes; heart-rate effort on flat sports",
-  CONS: "Active days in the last 30, and active weeks in the last 12",
-  VAR: "Number of sports, and how evenly your time is split",
-  PHY: "Lifetime hours on Strava, and years since you joined",
-};
-
 /** One-line "what this measures" per stat — shared by the scout report and the guide. */
 export const STAT_MEASURES: Record<AttributeKey, string> = {
   PAC: "Your typical fast pace in each sport",
   END: "How long you can go, and how much you train",
-  PWR: "How hard you push: hills, or heart rate on flat sports",
+  PRS: "How often you beat your own best",
   CONS: "How regularly you show up",
   VAR: "How many sports you do, and how evenly",
   PHY: "Your training history over the years",
@@ -100,16 +91,14 @@ function explainParts(card: PlayerCard, key: AttributeKey): Omit<StatExplanation
       );
       return { measures: STAT_MEASURES.END, facts: [...longest, `${n0(i.windowHours)} h this year`] };
     }
-    case "PWR": {
-      const facts: string[] = [];
-      if (i.windowElevationM > 0) facts.push(`${n0(i.windowElevationM / 1000)} km climbed this year`);
-      const hrSport = sports.find((s) => s.hrIntensity !== null && s.climbRateMPerH === null);
-      if (hrSport) facts.push(`${SPORT[hrSport.family]}s at ${Math.round(hrSport.hrIntensity! * 100)}% of max heart rate`);
-      const steepest = sports.filter((s) => s.hillyShare !== null).sort((a, b) => (b.hillyShare ?? 0) - (a.hillyShare ?? 0))[0];
-      if (steepest && steepest.hillyShare! > 0) facts.push(`${Math.round(steepest.hillyShare! * 100)}% of ${SPORT[steepest.family].toLowerCase()}s are hilly`);
+    case "PRS": {
+      const { hours, prs } = prTotals(i);
+      if (card.attributes.PRS?.measured === false) {
+        return { measures: STAT_MEASURES.PRS, facts: [`Not measured yet: needs ${MIN_PR_HOURS}+ hours of ${PR_SPORTS_TEXT}`] };
+      }
       return {
-        measures: STAT_MEASURES.PWR,
-        facts: facts.length ? facts : ["No climbing or heart-rate data yet"],
+        measures: STAT_MEASURES.PRS,
+        facts: [`${n0(prs)} PRs this year`, `${((prs / hours) * 10).toFixed(1)} per 10 hours of ${PR_SPORTS_TEXT}`],
       };
     }
     case "CONS":
@@ -138,3 +127,31 @@ function explainParts(card: PlayerCard, key: AttributeKey): Omit<StatExplanation
       };
   }
 }
+
+/** Guide: how each stat is worked out (one or two short sentences) and the single best way to raise it. */
+export const STAT_DETAIL: Record<AttributeKey, { how: string; tip: string }> = {
+  PAC: {
+    how: "Your faster sessions in each sport, compared with people who do that sport. Easy days don't drag it down.",
+    tip: "Add one speed or tempo session a week",
+  },
+  END: {
+    how: "Your longest session in each sport, plus your total hours this year.",
+    tip: "Build one longer session a week",
+  },
+  PRS: {
+    how: `Personal records Strava gave you this year, per 10 hours of ${PR_SPORTS_TEXT}. Swim- or gym-only athletes show “–” and aren't marked down.`,
+    tip: "Go after a segment or distance you've done before",
+  },
+  CONS: {
+    how: "Active days in the last 30, plus active weeks in the last 12.",
+    tip: "Short sessions count: just show up",
+  },
+  VAR: {
+    how: "How many sports you do regularly, and how evenly your time is split.",
+    tip: "Add a second sport, even easy sessions",
+  },
+  PHY: {
+    how: "Your lifetime hours on Strava, plus years since you joined.",
+    tip: "Keep going: it grows every year",
+  },
+};

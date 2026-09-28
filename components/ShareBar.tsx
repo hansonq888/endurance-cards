@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Download, Link2, Share2, Smartphone } from "lucide-react";
+import { Check, ChevronDown, Download, Link2, Share2, Smartphone } from "lucide-react";
+import { BRAND } from "@/lib/brand";
 import { useState } from "react";
 
 /**
@@ -29,7 +30,7 @@ export function ShareBar({
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
-  const text = `${name}'s Strava-FUT card: ${summary}`;
+  const text = `${name}'s ${BRAND.name} card: ${summary}`;
 
   async function copyLink() {
     try {
@@ -47,7 +48,7 @@ export function ShareBar({
     try {
       // Attach the image where the platform allows it (most phones do).
       const blob = await fetch(imageUrl).then((r) => r.blob());
-      const file = new File([blob], `${slug}-strava-fut.png`, { type: "image/png" });
+      const file = new File([blob], `${slug}-${BRAND.fileSlug}.png`, { type: "image/png" });
       const withFile = { files: [file], title: text, text, url: pageUrl };
       await navigator.share(navigator.canShare?.(withFile) ? withFile : { title: text, text, url: pageUrl });
     } catch (err) {
@@ -60,34 +61,35 @@ export function ShareBar({
 
   const btn =
     "flex items-center gap-1.5 rounded-lg border border-line bg-surface/60 px-3 py-2 font-accent text-[11px] uppercase tracking-wider transition-colors hover:border-foreground/30 hover:text-foreground disabled:opacity-50";
-  const tweet = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(pageUrl)}`;
+  const item = "flex items-center gap-2 rounded-md px-2.5 py-2 hover:bg-surface-2 hover:text-foreground";
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 text-muted">
+    <div className="flex items-center justify-center gap-2 text-muted">
       {!downloadOnly && (
         <button type="button" onClick={share} disabled={busy} className={`${btn} border-strava/60 text-foreground`}>
           <Share2 className="h-3.5 w-3.5 text-strava" aria-hidden /> Share
         </button>
       )}
-      <a href={imageUrl} download={`${slug}-strava-fut.png`} className={btn}>
-        <Download className="h-3.5 w-3.5" aria-hidden /> Card
-      </a>
-      <a href={storyUrl} download={`${slug}-strava-fut-story.png`} className={btn} title="1080×1920 for Instagram, TikTok and Snapchat stories">
-        <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story
-      </a>
-      {!downloadOnly && (
-        <>
-          <button type="button" onClick={copyLink} className={btn}>
-            {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Link2 className="h-3.5 w-3.5" aria-hidden />}
-            {copied ? "Copied" : "Link"}
-          </button>
-          <a href={tweet} target="_blank" rel="noopener noreferrer" className={btn} aria-label="Post on X">
-            <span className="font-bold" aria-hidden>
-              𝕏
-            </span>{" "}
-            Post
+      {/* Both downloads behind one button: the card PNG and the 1080×1920 story. */}
+      <details className="group relative">
+        <summary className={`${btn} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+          <Download className="h-3.5 w-3.5" aria-hidden /> Save
+          <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
+        <div className="absolute left-1/2 z-30 mt-1.5 w-44 -translate-x-1/2 rounded-lg border border-line bg-surface p-1 font-accent text-[11px] shadow-xl">
+          <a href={imageUrl} download={`${slug}-${BRAND.fileSlug}.png`} className={item}>
+            <Download className="h-3.5 w-3.5" aria-hidden /> Card image
           </a>
-        </>
+          <a href={storyUrl} download={`${slug}-${BRAND.fileSlug}-story.png`} className={item}>
+            <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story (1080×1920)
+          </a>
+        </div>
+      </details>
+      {!downloadOnly && (
+        <button type="button" onClick={copyLink} className={btn} aria-label="Copy link">
+          {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Link2 className="h-3.5 w-3.5" aria-hidden />}
+          {copied ? "Copied" : "Link"}
+        </button>
       )}
     </div>
   );

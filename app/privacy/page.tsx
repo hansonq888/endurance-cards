@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
+import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
 import { SectionHeading } from "@/components/SectionHeading";
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "What Strava-FUT reads from Strava, what it stores, who can see it, and how to delete it.",
+  description: "What Kudex reads from Strava, what it stores, who can see it, and how to delete it.",
 };
 
 // Keep this page in sync with the code: lib/engine.ts (what's derived), lib/redis.ts (what's stored),
-// lib/access.ts (who sees what), lib/polyline.ts (route trimming).
+// lib/access.ts + lib/audience.ts (who sees what), lib/polyline.ts (route trimming).
 const SECTIONS: { title: string; items: string[] }[] = [
   {
     title: "What we read from Strava",
@@ -16,7 +17,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       "Only after you connect and approve access. We ask for read-only access to your profile and activities.",
       "Profile: name, username, photo, city/region/country and when you joined Strava.",
       "Lifetime run, ride and swim totals.",
-      "Your activities from the last 12 months, plus any past year you open in the calendar: type, name, date and time, distance, moving time, climbing, speed, heart rate (if recorded), PR counts, whether it was a race, and Strava's simplified route line.",
+      "Your activities from the last 12 months, plus any past year you open in the calendar: type, name, date and time, distance, moving time, climbing, speed, PR counts, whether it was a race, who can see it on Strava, and Strava's simplified route line.",
     ],
   },
   {
@@ -27,14 +28,17 @@ const SECTIONS: { title: string; items: string[] }[] = [
       "Route shapes: each route has its first and last 400 m cut off, then is shrunk into a box with no coordinates, so it can't be placed back on a map. We never store GPS coordinates.",
       "Your rating at each refresh, for the trend line. Your visibility settings.",
       "Strava sign-in tokens, encrypted, so your card can refresh without you being signed in.",
-      "Not stored: raw GPS tracks, your email, your password, heart-rate traces, or anything from Strava we don't use above.",
+      "Not stored: raw GPS tracks, heart rate, your email, your password, or anything from Strava we don't use above.",
     ],
   },
   {
     title: "Who can see your card",
     items: [
-      "You choose, and can change it any time from your card: Public (anyone, at your username), Link only (only people with your secret link — the default), or Private (only you).",
+      "You choose, and can change it any time from your card: Public (anyone, at your username, and findable by username search), Link only (only people with your secret link), or Private (only you).",
+      "New cards start from how you share on Strava: Public if most of your training is visible to Everyone there, Link only if most is Followers-only, and Private if most is Only You.",
       "You can also hide your training calendar, races and route shapes from visitors.",
+      "Visitors only see what they could already see on Strava. On a public card, their version of your card (rating, stats, trophies, races, calendar and routes) is built only from activities set to Everyone. With your link, from Everyone and Followers activities. Activities set to Only You count only for you.",
+      "When you change an activity's visibility on Strava, your card is rebuilt within a few minutes. You can preview exactly what visitors see from your card settings.",
       "Trophy progress and locked trophies are only ever shown to you.",
       "Link-only and private cards are hidden from search engines. Private cards and their images are never stored in shared caches.",
     ],
@@ -60,7 +64,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       "One sign-in cookie so the site knows it's you, and a short-lived one during sign-in. No ads, no analytics trackers.",
       "Your data is used only to build your card. We don't sell it, share it with anyone else, or use it to train AI models.",
       "Services involved: Strava (the data source), and our hosting and database providers, which store it for us.",
-      "Strava-FUT is not affiliated with or endorsed by Strava. Strava data is used under the Strava API Agreement.",
+      "Kudex is not affiliated with or endorsed by Strava. Strava data is used under the Strava API Agreement.",
     ],
   },
 ];
@@ -69,9 +73,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:py-12">
       <nav className="mb-10 flex items-center justify-between">
-        <Link href="/" className="display text-xl tracking-tight">
-          STRAVA<span className="text-strava">-FUT</span>
-        </Link>
+        <Wordmark />
         <Link href="/guide" className="font-accent text-xs uppercase tracking-wider text-muted hover:text-foreground">
           How it works
         </Link>
@@ -99,7 +101,7 @@ export default function PrivacyPage() {
         ))}
       </div>
 
-      <footer className="mt-16 text-center text-xs text-muted">Powered by Strava · Not affiliated with EA Sports or Strava</footer>
+      <footer className="mt-16 text-center text-xs text-muted">Powered by Strava · Not affiliated with Strava</footer>
     </main>
   );
 }

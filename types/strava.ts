@@ -1,5 +1,5 @@
 /**
- * Subset of the Strava v3 API payloads that Strava-FUT consumes.
+ * Subset of the Strava v3 API payloads that Kudex consumes.
  * Only fields we actually read are typed; everything else is ignored.
  * Reference: https://developers.strava.com/docs/reference/
  */
@@ -92,6 +92,10 @@ export interface StravaSummaryActivity {
   workout_type?: number | null;
   pr_count?: number;
   achievement_count?: number;
+  /** Who can see it on Strava. Decides which Kudex audiences may see it (lib/audience.ts). */
+  visibility?: "everyone" | "followers_only" | "only_me";
+  /** Older "Only You" flag; still sent alongside `visibility`. */
+  private?: boolean;
   /** Simplified GPS track (Google encoded polyline); null for indoor/manual activities. */
   map?: { id: string; summary_polyline: string | null };
 }

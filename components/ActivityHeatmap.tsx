@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CardTier, RaceResult, RouteShape, YearCalendar } from "@/types/player";
-import { holoVars } from "@/lib/card-theme";
-import { fmtDuration, HEAT_STEPS, heatStep, SPORT_COLORS, SPORT_LABELS } from "@/lib/viz";
+import { BarChart3, LayoutGrid } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CardTier, RaceResult, YearCalendar } from "@/types/player";
+import { fmtDuration, HEAT_STEPS, heatStep } from "@/lib/viz";
+import { DayRoutes } from "./DayRoutes";
 
 const CELL = 12;
 const GAP = 3;
@@ -70,8 +71,11 @@ export function ActivityHeatmap({
   years,
   recent,
   routesEnabled = true,
+  view: previewView,
 }: {
   slug: string;
+  /** Owner previewing a visitor's version: fetch years and routes as that audience would see them. */
+  view?: "link" | "public";
   /** False when the owner hides routes from visitors: days aren't clickable. */
   routesEnabled?: boolean;
   /** Tints the holographic route panel to the card's tier. */
@@ -96,7 +100,7 @@ export function ActivityHeatmap({
     setStatus({ loading: true, error: null });
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
-        const res = await fetch(`/api/scout/${encodeURIComponent(slug)}/calendar?year=${next}`);
+        const res = await fetch(`/api/scout/${encodeURIComponent(slug)}/calendar?year=${next}${previewView ? `&view=${previewView}` : ""}`);
         if (res.status === 409) {
           // Someone else is loading this year right now — wait for their result.
           await new Promise((r) => setTimeout(r, 1500));
@@ -114,6 +118,19 @@ export function ActivityHeatmap({
   }
 
   const [view, setView] = useState<"grid" | "bars">("grid");
+  // Underline position, measured from the active tab so it fits any font or zoom.
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Animate only when the tab actually changes, so the bar appears in place on load
+  // (and isn't fooled by React re-running effects in development).
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, animate: false });
+  const measuredView = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const el = tabRefs.current[view];
+    if (!el) return;
+    const changed = measuredView.current !== null && measuredView.current !== view;
+    measuredView.current = view;
+    setIndicator({ left: el.offsetLeft, width: el.offsetWidth, animate: changed });
+  }, [view]);
   const [hover, setHover] = useState<Hover | null>(null);
   const [picked, setPicked] = useState<Day | null>(null);
   const isRecent = period === "recent";
@@ -208,206 +225,237 @@ export function ActivityHeatmap({
     <div className="font-accent">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line pb-2">
         <h2 className="display text-sm leading-none tracking-tight">Training calendar</h2>
-        <div className="flex items-center gap-2">
-          {years.length > 0 && (
-            <label className="flex items-center">
-              <span className="sr-only">Period</span>
-              <select
-                value={String(period)}
-                onChange={(e) => choose(e.target.value === "recent" ? "recent" : Number(e.target.value))}
-                className="rounded-md border border-line bg-surface px-2 py-1 text-[11px] uppercase tracking-wider text-foreground"
-              >
-                <option value="recent">Last 12 months</option>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div role="tablist" aria-label="Calendar view" className="flex rounded-md border border-line p-0.5 text-[11px] uppercase tracking-wider">
-            {(["grid", "bars"] as const).map((v) => (
-              <button
-                key={v}
-                role="tab"
-                aria-selected={view === v}
-                onClick={() => {
-                  setView(v);
-                  setHover(null);
-                }}
-                className={`rounded px-2.5 py-1 transition-colors ${view === v ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"}`}
-              >
-                {v === "grid" ? "Grid" : "Weekly bars"}
-              </button>
-            ))}
-          </div>
+        {/* Underline tabs: the active one's orange bar sits on the header rule and slides between tabs. */}
+        <div role="tablist" aria-label="Calendar view" className="relative -mb-2 flex items-end gap-5 self-end">
+          {(
+            [
+              ["grid", "Grid", LayoutGrid],
+              ["bars", "Weekly", BarChart3],
+            ] as const
+          ).map(([v, label, Icon]) => (
+            <button
+              key={v}
+              ref={(el) => {
+                tabRefs.current[v] = el;
+              }}
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => {
+                setView(v);
+                setHover(null);
+              }}
+              className={`flex items-center gap-1.5 pb-2 text-[11px] uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-strava/60 ${
+                view === v ? "text-foreground" : "text-muted hover:text-foreground"
+              }`}
+            >
+              <Icon className={`h-3.5 w-3.5 ${view === v ? "text-strava" : ""}`} aria-hidden />
+              {label}
+            </button>
+          ))}
+          <span
+            aria-hidden
+            className={`absolute bottom-0 h-0.5 rounded-full bg-strava ${indicator.animate ? "transition-[left,width] duration-300 ease-out" : ""}`}
+            style={{ left: indicator.left, width: indicator.width, opacity: indicator.width ? 1 : 0 }}
+          />
         </div>
       </div>
 
-      <dl className="mb-4 flex flex-wrap gap-x-8 gap-y-2 text-xs">
-        {isRecent && (
-          <div>
-            <dt className="text-[11px] uppercase tracking-wider text-muted">Form</dt>
-            <dd className="mt-0.5 text-base font-medium">
-              {stats.form}{" "}
-              {trend && (
-                <span className={stats.change! >= 0 ? "text-strava" : "text-muted"}>
-                  {stats.change! >= 0 ? "↑" : "↓"} {trend}
-                </span>
-              )}
-            </dd>
-          </div>
-        )}
-        {(isRecent
-          ? [
-              ["Last 6 weeks", `${stats.perWeek.toFixed(1)} h / week`],
-              ["PRs this year", String(stats.prs)],
-              ["Active days", `${stats.active} / ${days.length}`],
-              ["Longest streak", plural(stats.longest, "day")],
-            ]
-          : [
-              ["Total", `${Math.round(stats.totalHours).toLocaleString("en-US")} h`],
-              ["PRs", String(stats.prs)],
-              ["Races", String(races.length)],
-              ["Active days", `${stats.active} / ${days.length}`],
-              ["Longest streak", plural(stats.longest, "day")],
-            ]
-        ).map(([k, v]) => (
-          <div key={k}>
-            <dt className="text-[11px] uppercase tracking-wider text-muted">{k}</dt>
-            <dd className="mt-0.5 text-base font-medium">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* Main column (stats, chart, day detail) with a controls sidebar on the right — above it on phones. */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:gap-8">
+        <aside className={`shrink-0 lg:order-last lg:w-36 ${years.length ? "" : "hidden"}`}>
+          {years.length > 0 && (
+            // Years as a list: a sideways swipe row on phones, a vertical scroller beside the chart on desktop.
+            <div
+              role="listbox"
+              aria-label="Period"
+              className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:mx-0 lg:max-h-56 lg:flex-col lg:overflow-y-auto lg:overflow-x-visible lg:px-0 lg:pr-1"
+            >
+              {(["recent", ...years] as const).map((p) => {
+                const active = period === p;
+                return (
+                  <button
+                    key={p}
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => choose(p)}
+                    className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-[11px] uppercase tracking-wider tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-strava/60 ${
+                      active ? "bg-strava font-medium text-[#140f0c]" : "text-muted hover:bg-surface-2 hover:text-foreground"
+                    }`}
+                  >
+                    {p === "recent" ? "Last 12 months" : p}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </aside>
 
-      {(status.loading || status.error) && !data && (
-        <p role="status" className="mb-3 text-xs text-muted">
-          {status.loading ? `Loading ${period} from Strava…` : status.error}
-        </p>
-      )}
+        <div className="min-w-0 flex-1">
+          <dl className="mb-4 flex flex-wrap gap-x-8 gap-y-2 text-xs">
+            {isRecent && (
+              <div>
+                <dt className="text-[11px] uppercase tracking-wider text-muted">Form</dt>
+                <dd className="mt-0.5 text-base font-medium">
+                  {stats.form}{" "}
+                  {trend && (
+                    <span className={stats.change! >= 0 ? "text-strava" : "text-muted"}>
+                      {stats.change! >= 0 ? "↑" : "↓"} {trend}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
+            {(isRecent
+              ? [
+                  ["Last 6 weeks", `${stats.perWeek.toFixed(1)} h / week`],
+                  ["PRs this year", String(stats.prs)],
+                  ["Active days", `${stats.active} / ${days.length}`],
+                  ["Longest streak", plural(stats.longest, "day")],
+                ]
+              : [
+                  ["Total", `${Math.round(stats.totalHours).toLocaleString("en-US")} h`],
+                  ["PRs", String(stats.prs)],
+                  ["Races", String(races.length)],
+                  ["Active days", `${stats.active} / ${days.length}`],
+                  ["Longest streak", plural(stats.longest, "day")],
+                ]
+            ).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-[11px] uppercase tracking-wider text-muted">{k}</dt>
+                <dd className="mt-0.5 text-base font-medium">{v}</dd>
+              </div>
+            ))}
+          </dl>
 
-      <div
-        ref={scroller}
-        className={`overflow-x-auto pb-1 transition-opacity ${data ? "" : "pointer-events-none opacity-30"}`}
-        onMouseLeave={() => setHover(null)}
-      >
-        {/* Scales to the panel width; below ~640px it keeps a readable size and scrolls inside the panel. */}
-        <svg
-          viewBox={`0 0 ${width} ${view === "grid" ? gridH : barsH}`}
-          className="block h-auto w-full min-w-[640px]"
-          role="img"
-          aria-label={view === "grid" ? "Training minutes per day over the last year" : "Training hours per week, with PRs and races marked"}
-        >
-          {months.map((m) => (
-            <text key={`${m.week}-${m.label}`} x={LEFT + m.week * PITCH} y={11} fontSize="10" className="fill-muted">
-              {m.label}
-            </text>
-          ))}
+          {(status.loading || status.error) && !data && (
+            <p role="status" className="mb-3 text-xs text-muted">
+              {status.loading ? `Loading ${period} from Strava…` : status.error}
+            </p>
+          )}
 
-          {view === "grid" ? (
-            <>
-              {[
-                [1, "Mon"],
-                [3, "Wed"],
-                [5, "Fri"],
-              ].map(([row, label]) => (
-                <text key={label} x={0} y={TOP + (row as number) * PITCH + CELL - 2} fontSize="10" className="fill-muted">
-                  {label}
+          <div
+            ref={scroller}
+            className={`overflow-x-auto pb-1 transition-opacity ${data ? "" : "pointer-events-none opacity-30"}`}
+            onMouseLeave={() => setHover(null)}
+          >
+            {/* Scales to the panel width; below ~640px it keeps a readable size and scrolls inside the panel. */}
+            <svg
+              viewBox={`0 0 ${width} ${view === "grid" ? gridH : barsH}`}
+              className="block h-auto w-full min-w-[640px]"
+              role="img"
+              aria-label={view === "grid" ? "Training minutes per day over the last year" : "Training hours per week, with PRs and races marked"}
+            >
+              {months.map((m) => (
+                <text key={`${m.week}-${m.label}`} x={LEFT + m.week * PITCH} y={11} fontSize="10" className="fill-muted">
+                  {m.label}
                 </text>
               ))}
-              {days.map((d) => {
-                const x = LEFT + d.week * PITCH;
-                const y = TOP + d.weekday * PITCH;
-                const active = hover?.kind === "day" && hover.day === d;
-                return (
-                  <g
-                    key={d.key}
-                    onMouseEnter={() => setHover({ kind: "day", day: d })}
-                    onClick={() => routesEnabled && d.minutes > 0 && setPicked(picked === d ? null : d)}
-                    className={routesEnabled && d.minutes > 0 ? "cursor-pointer" : undefined}
-                  >
-                    <rect
-                      x={x}
-                      y={y}
-                      width={CELL}
-                      height={CELL}
-                      rx={2.5}
-                      fill={heatStep(d.minutes).color}
-                      stroke={picked === d ? "var(--strava)" : active ? "var(--foreground)" : "none"}
-                      strokeWidth={picked === d ? 2 : 1.5}
-                    />
-                    {d.prs > 0 && <circle cx={x + CELL / 2} cy={y + CELL / 2} r={2} className="fill-foreground" />}
-                    <title>{`${fmtDate(d.date)} · ${fmtDuration(d.minutes)}${d.prs ? ` · ${plural(d.prs, "PR")}` : ""}`}</title>
-                  </g>
-                );
-              })}
-            </>
-          ) : (
-            <>
-              {hourTicks.map((h) => {
-                const y = barY(h * 60);
-                return (
-                  <g key={h}>
-                    <line x1={LEFT} x2={width} y1={y} y2={y} stroke="var(--line)" strokeDasharray="2 3" />
-                    <text x={0} y={y + 3} fontSize="10" className="fill-muted">
-                      {h}h
-                    </text>
-                  </g>
-                );
-              })}
-              <line x1={LEFT} x2={width} y1={base} y2={base} stroke="var(--line)" />
-              {weeks.map((w) => {
-                const x = LEFT + w.week * PITCH;
-                const y = barY(w.minutes);
-                const active = hover?.kind === "week" && hover.week === w;
-                const dim = hover?.kind === "week" && !active;
-                return (
-                  <g key={w.week} onMouseEnter={() => setHover({ kind: "week", week: w })}>
-                    {/* Hit target taller than the bar. */}
-                    <rect x={x - GAP / 2} y={TOP} width={PITCH} height={base - TOP} fill="transparent" />
-                    {w.minutes > 0 && <path d={barPath(x, y, CELL, base)} fill="var(--strava)" opacity={dim ? 0.45 : 1} />}
-                    {w.prs > 0 && <circle cx={x + CELL / 2} cy={y - 5} r={w.prs >= 3 ? 3.5 : 2.5} className="fill-foreground" />}
-                    {w.races.length > 0 && (
-                      <path d={flagPath(x + CELL / 2 - 1, y - (w.prs > 0 ? 20 : 13))} fill="var(--foreground)" stroke="var(--foreground)" strokeWidth={1.2} />
-                    )}
-                    <title>{`Week of ${fmtShort(w.start)} · ${fmtDuration(w.minutes)}${w.prs ? ` · ${plural(w.prs, "PR")}` : ""}${w.races.map((r) => ` · Race: ${r.name}`).join("")}`}</title>
-                  </g>
-                );
-              })}
-            </>
-          )}
-        </svg>
-      </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted">
-        <p aria-live="polite" className="min-h-4">
-          {caption ?? (view === "grid" ? `Hover a day for details${routesEnabled ? " · click to see its route" : ""}` : "Hover a week for details")}
-        </p>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-foreground" /> Personal record (PR)
-          </span>
-          {view === "bars" && (
-            <span className="flex items-center gap-1.5">
-              <svg viewBox="0 0 8 9" className="h-2.5 w-2.5" aria-hidden>
-                <path d={flagPath(1, 0.5)} fill="var(--foreground)" stroke="var(--foreground)" strokeWidth={1.2} />
-              </svg>{" "}
-              Race
-            </span>
-          )}
-          {view === "grid" && (
-            <span className="flex items-center gap-1.5">
-              <span>Less</span>
-              {HEAT_STEPS.map((s) => (
-                <span key={s.label} title={s.label} className="h-3 w-3 rounded-[3px]" style={{ background: s.color }} />
-              ))}
-              <span>More</span>
-            </span>
-          )}
+              {view === "grid" ? (
+                <>
+                  {[
+                    [1, "Mon"],
+                    [3, "Wed"],
+                    [5, "Fri"],
+                  ].map(([row, label]) => (
+                    <text key={label} x={0} y={TOP + (row as number) * PITCH + CELL - 2} fontSize="10" className="fill-muted">
+                      {label}
+                    </text>
+                  ))}
+                  {days.map((d) => {
+                    const x = LEFT + d.week * PITCH;
+                    const y = TOP + d.weekday * PITCH;
+                    const active = hover?.kind === "day" && hover.day === d;
+                    return (
+                      <g
+                        key={d.key}
+                        onMouseEnter={() => setHover({ kind: "day", day: d })}
+                        onClick={() => routesEnabled && d.minutes > 0 && setPicked(picked === d ? null : d)}
+                        className={routesEnabled && d.minutes > 0 ? "cursor-pointer" : undefined}
+                      >
+                        <rect
+                          x={x}
+                          y={y}
+                          width={CELL}
+                          height={CELL}
+                          rx={2.5}
+                          fill={heatStep(d.minutes).color}
+                          stroke={picked === d ? "var(--strava)" : active ? "var(--foreground)" : "none"}
+                          strokeWidth={picked === d ? 2 : 1.5}
+                        />
+                        {d.prs > 0 && <circle cx={x + CELL / 2} cy={y + CELL / 2} r={2} className="fill-foreground" />}
+                        <title>{`${fmtDate(d.date)} · ${fmtDuration(d.minutes)}${d.prs ? ` · ${plural(d.prs, "PR")}` : ""}`}</title>
+                      </g>
+                    );
+                  })}
+                </>
+              ) : (
+                <>
+                  {hourTicks.map((h) => {
+                    const y = barY(h * 60);
+                    return (
+                      <g key={h}>
+                        <line x1={LEFT} x2={width} y1={y} y2={y} stroke="var(--line)" strokeDasharray="2 3" />
+                        <text x={0} y={y + 3} fontSize="10" className="fill-muted">
+                          {h}h
+                        </text>
+                      </g>
+                    );
+                  })}
+                  <line x1={LEFT} x2={width} y1={base} y2={base} stroke="var(--line)" />
+                  {weeks.map((w) => {
+                    const x = LEFT + w.week * PITCH;
+                    const y = barY(w.minutes);
+                    const active = hover?.kind === "week" && hover.week === w;
+                    const dim = hover?.kind === "week" && !active;
+                    return (
+                      <g key={w.week} onMouseEnter={() => setHover({ kind: "week", week: w })}>
+                        {/* Hit target taller than the bar. */}
+                        <rect x={x - GAP / 2} y={TOP} width={PITCH} height={base - TOP} fill="transparent" />
+                        {w.minutes > 0 && <path d={barPath(x, y, CELL, base)} fill="var(--strava)" opacity={dim ? 0.45 : 1} />}
+                        {w.prs > 0 && <circle cx={x + CELL / 2} cy={y - 5} r={w.prs >= 3 ? 3.5 : 2.5} className="fill-foreground" />}
+                        {w.races.length > 0 && (
+                          <path d={flagPath(x + CELL / 2 - 1, y - (w.prs > 0 ? 20 : 13))} fill="var(--foreground)" stroke="var(--foreground)" strokeWidth={1.2} />
+                        )}
+                        <title>{`Week of ${fmtShort(w.start)} · ${fmtDuration(w.minutes)}${w.prs ? ` · ${plural(w.prs, "PR")}` : ""}${w.races.map((r) => ` · Race: ${r.name}`).join("")}`}</title>
+                      </g>
+                    );
+                  })}
+                </>
+              )}
+            </svg>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted">
+            <p aria-live="polite" className="min-h-4">
+              {caption ?? (view === "grid" ? `Hover a day for details${routesEnabled ? " · click to see its route" : ""}` : "Hover a week for details")}
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-foreground" /> Personal record (PR)
+              </span>
+              {view === "bars" && (
+                <span className="flex items-center gap-1.5">
+                  <svg viewBox="0 0 8 9" className="h-2.5 w-2.5" aria-hidden>
+                    <path d={flagPath(1, 0.5)} fill="var(--foreground)" stroke="var(--foreground)" strokeWidth={1.2} />
+                  </svg>{" "}
+                  Race
+                </span>
+              )}
+              {view === "grid" && (
+                <span className="flex items-center gap-1.5">
+                  <span>Less</span>
+                  {HEAT_STEPS.map((s) => (
+                    <span key={s.label} title={s.label} className="h-3 w-3 rounded-[3px]" style={{ background: s.color }} />
+                  ))}
+                  <span>More</span>
+                </span>
+              )}
+            </div>
+          </div>
+          {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} tier={tier} day={picked} view={previewView} onClose={() => setPicked(null)} />}
         </div>
       </div>
-      {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} tier={tier} day={picked} onClose={() => setPicked(null)} />}
     </div>
   );
 }
@@ -417,168 +465,4 @@ function errorMessage(status: number, message?: string): string {
   if (status === 401) return "This athlete needs to reconnect Strava before older years can load.";
   if (status === 404) return "No data for that year.";
   return message ?? "Couldn't load that year. Try again.";
-}
-
-const fmtClock = (sec: number) => {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.round(sec % 60);
-  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
-};
-
-function shapePath(points: number[], size: number, pad: number) {
-  const s = size - pad * 2;
-  let d = "";
-  for (let i = 0; i < points.length; i += 2) d += `${i ? "L" : "M"}${(pad + points[i] * s).toFixed(1)} ${(pad + points[i + 1] * s).toFixed(1)}`;
-  return d;
-}
-
-/** Client-side cache so re-clicking a day is instant. */
-const routeCache = new Map<string, RouteShape[]>();
-
-/** The clicked day's route(s): shape only, fetched on demand. */
-function DayRoutes({ slug, tier, day, onClose }: { slug: string; tier: CardTier; day: Day; onClose: () => void }) {
-  const cacheKey = `${slug}:${day.key}`;
-  const [state, setState] = useState<{ routes: RouteShape[] | null; error: string | null }>(() => ({
-    routes: routeCache.get(cacheKey) ?? null,
-    error: null,
-  }));
-  const [index, setIndex] = useState(0);
-
-  // Parent remounts this per day (key), so only the uncached fetch lives here.
-  useEffect(() => {
-    if (routeCache.has(cacheKey)) return;
-    let cancelled = false;
-    fetch(`/api/scout/${encodeURIComponent(slug)}/routes?date=${day.key}`)
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.message ?? "Couldn't load this day's route.");
-        routeCache.set(cacheKey, body.routes);
-        if (!cancelled) setState({ routes: body.routes, error: null });
-      })
-      .catch((err: Error) => !cancelled && setState({ routes: null, error: err.message }));
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, day.key, cacheKey]);
-
-  const routes = state.routes;
-  const route = routes?.[index];
-
-  // Foil sheen follows the pointer across the route window.
-  function sheen(e: React.PointerEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    e.currentTarget.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
-    e.currentTarget.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
-  }
-
-  return (
-    <div className="mt-5 flex flex-col gap-6 border-t border-line pt-5 sm:flex-row sm:items-center" style={holoVars(tier)}>
-      {/* The route floats on a soft tier-tinted glow — no frame. */}
-      <div onPointerMove={sheen} className="group relative aspect-square w-full max-w-[200px] shrink-0 self-center sm:self-auto">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{ background: "radial-gradient(circle, color-mix(in srgb, var(--holo-1) 12%, transparent), transparent 65%)" }}
-        />
-        {route ? (
-          <svg viewBox="0 0 100 100" className="relative h-full w-full" role="img" aria-label={`Route shape of ${route.name}`}>
-            <defs>
-              <linearGradient id={`holo-${day.key}`} x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" style={{ stopColor: "var(--holo-1)" }} />
-                <stop offset="0.35" style={{ stopColor: "var(--holo-2)" }} />
-                <stop offset="0.65" style={{ stopColor: "var(--holo-3)" }} />
-                <stop offset="1" style={{ stopColor: "var(--holo-4)" }} />
-              </linearGradient>
-            </defs>
-            <path
-              d={shapePath(route.points, 100, 14)}
-              fill="none"
-              stroke={`url(#holo-${day.key})`}
-              strokeWidth={2.6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                filter:
-                  "drop-shadow(0 0 3px color-mix(in srgb, var(--holo-2) 60%, transparent)) drop-shadow(0 0 8px color-mix(in srgb, var(--holo-4) 40%, transparent))",
-              }}
-            />
-          </svg>
-        ) : (
-          <div className="relative flex h-full items-center justify-center px-6 text-center text-[11px] text-muted">
-            {state.error ?? (routes ? "No GPS route (indoor, pool or manual)" : "Loading…")}
-          </div>
-        )}
-        <div
-          aria-hidden
-          className="holo-foil pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 group-hover:opacity-70"
-          style={{ maskImage: "radial-gradient(circle, black 35%, transparent 70%)", WebkitMaskImage: "radial-gradient(circle, black 35%, transparent 70%)" }}
-        />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-[11px] uppercase tracking-wider text-muted">{fmtDate(day.date)}</p>
-          <button type="button" onClick={onClose} className="text-[11px] uppercase tracking-wider text-muted hover:text-foreground">
-            Close
-          </button>
-        </div>
-        {route ? (
-          <>
-            <p className="display mt-1 truncate text-xl leading-tight">{route.name}</p>
-            <p className="mt-1 flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted">
-              <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: SPORT_COLORS[route.family] }} aria-hidden />
-              {SPORT_LABELS[route.family]}
-              {route.prs > 0 && <span className="text-strava">· {route.prs === 1 ? "1 PR" : `${route.prs} PRs`}</span>}
-            </p>
-            <p className="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2">
-              {[
-                [String(route.distanceKm), "km"],
-                [fmtClock(route.movingTime), "time"],
-                [route.elevationM.toLocaleString("en-US"), "m up"],
-              ].map(([v, u]) => (
-                <span key={u}>
-                  <span className="display text-3xl leading-none">{v}</span>
-                  <span className="ml-1 align-top text-[10px] text-muted">{u}</span>
-                </span>
-              ))}
-            </p>
-          </>
-        ) : (
-          <p className="display mt-1 text-xl">{fmtDuration(day.minutes)} of training</p>
-        )}
-        {routes && routes.length > 1 && (
-          <div className="mt-4 flex flex-wrap gap-5" role="tablist" aria-label="Activities this day">
-            {routes.map((r, i) => (
-              <button
-                key={i}
-                type="button"
-                role="tab"
-                aria-selected={i === index}
-                onClick={() => setIndex(i)}
-                className={`group flex flex-col items-start gap-1 transition-opacity ${i === index ? "" : "opacity-55 hover:opacity-100"}`}
-              >
-                <span className="flex items-center gap-2">
-                  <svg viewBox="0 0 100 100" className="h-7 w-7" aria-hidden>
-                    <path d={shapePath(r.points, 100, 12)} fill="none" stroke={SPORT_COLORS[r.family]} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span className="text-left text-[10px] leading-tight">
-                    <span className="block uppercase tracking-wider text-muted">{SPORT_LABELS[r.family]}</span>
-                    <span className="block tabular-nums">{r.distanceKm} km</span>
-                  </span>
-                </span>
-                {/* Foil underline marks the selected activity. */}
-                <span
-                  aria-hidden
-                  className={`h-0.5 w-full rounded-full ${i === index ? "" : "invisible"}`}
-                  style={{ background: "linear-gradient(90deg, var(--holo-1), var(--holo-2), var(--holo-3), var(--holo-4))" }}
-                />
-              </button>
-            ))}
-          </div>
-        )}
-        <p className="mt-3 text-[10px] text-muted">Shape only: trimmed at both ends and never placed on a map.</p>
-      </div>
-    </div>
-  );
 }

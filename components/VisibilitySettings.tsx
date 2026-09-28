@@ -1,18 +1,12 @@
 "use client";
 
-import { Check, Copy, Eye, EyeOff, Globe, Link2, Lock, RefreshCw } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import type { CardSettings, Visibility } from "@/types/player";
-import { SectionHeading } from "./SectionHeading";
+import type { CardSettings } from "@/types/player";
+import { visibilityOption, VISIBILITY_OPTIONS } from "./visibilityOptions";
 
-const OPTIONS: { value: Visibility; label: string; icon: typeof Globe; help: string }[] = [
-  { value: "public", label: "Public", icon: Globe, help: "Anyone can find and view your card at your username." },
-  { value: "unlisted", label: "Link only", icon: Link2, help: "Only people with your secret link can see it. Your username page shows “not found”." },
-  { value: "private", label: "Private", icon: Lock, help: "Only you, when signed in. Sharing and embeds are turned off." },
-];
-
-/** Owner-only: who can see the card, which sections visitors get, and the share link. */
+/** Owner-only (inside CardSettingsPanel): who can see the card, which sections visitors get, and the share link. */
 export function VisibilitySettings({
   slug,
   settings: initial,
@@ -43,8 +37,14 @@ export function VisibilitySettings({
         body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error();
-      setSettings(await res.json());
-      startTransition(() => router.refresh());
+      const next: CardSettings = await res.json();
+      setSettings(next);
+      // Reset the link while viewing through the old one? That URL is dead now, so move to the new one.
+      if (patch.resetLink && window.location.pathname === `/${previous.shareToken}`) {
+        router.replace(`/${next.shareToken}`);
+      } else {
+        startTransition(() => router.refresh());
+      }
     } catch {
       setSettings(previous);
       setError("Couldn't save. Try again.");
@@ -71,14 +71,14 @@ export function VisibilitySettings({
     }
   }
 
-  const current = OPTIONS.find((o) => o.value === settings.visibility)!;
+  const current = visibilityOption(settings.visibility);
   const toggle = "flex w-full items-center justify-between gap-3 py-2 text-left text-xs disabled:opacity-50";
 
   return (
-    <section className="grain rounded-2xl border border-line p-4 text-left font-accent">
-      <SectionHeading>Who can see your card</SectionHeading>
+    <div className="text-left font-accent">
+      <p className="mb-2 text-[10px] uppercase tracking-wider text-muted">Who can see it</p>
       <div role="radiogroup" aria-label="Card visibility" className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
-        {OPTIONS.map(({ value, label, icon: Icon }) => (
+        {VISIBILITY_OPTIONS.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
             type="button"
@@ -142,7 +142,7 @@ export function VisibilitySettings({
         </div>
       )}
       {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
-      <p className="mt-2 text-[10px] text-muted">You always see everything here. These settings only change what visitors see.</p>
-    </section>
+      <p className="mt-2 text-[10px] text-muted">Only changes what visitors see. You always see everything.</p>
+    </div>
   );
 }

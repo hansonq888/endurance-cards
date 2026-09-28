@@ -1,6 +1,7 @@
-/** Core domain types for Strava-FUT player cards. */
+/** Core domain types for Kudex player cards. */
+import type { PrivacyMix } from "@/lib/audience";
 
-export const ATTRIBUTE_KEYS = ["PAC", "END", "PWR", "CONS", "VAR", "PHY"] as const;
+export const ATTRIBUTE_KEYS = ["PAC", "END", "PRS", "CONS", "VAR", "PHY"] as const;
 export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
 
 export type CardTier = "bronze" | "silver" | "gold" | "icon";
@@ -23,6 +24,12 @@ export interface AttributeScore {
   value: number;
   /** Human-readable explanation of the raw inputs that drove the score. */
   detail: string;
+  /**
+   * False when the athlete's sports give us nothing to measure (e.g. no timed
+   * activities for Pace). Shown as "–" and left out of the overall; `value` is
+   * then only a placeholder for charts.
+   */
+  measured?: boolean;
 }
 
 export type TrophyLevel = 1 | 2 | 3;
@@ -50,13 +57,8 @@ export interface SportBreakdown {
   /** Upper-quartile average speed (m/s); null for sports without a pace model or too few samples. */
   paceMps: number | null;
   paceSamples: number;
-  /** Metres climbed per moving hour; null for non-terrain sports. */
-  climbRateMPerH: number | null;
-  /** Share (0–1) of sessions steeper than the sport's "hilly" threshold; null for non-terrain sports. */
-  hillyShare: number | null;
-  /** Mean of average HR / max HR across sessions with heart-rate data. */
-  hrIntensity: number | null;
-  hrSamples: number;
+  /** Personal records Strava awarded in this sport over the window. */
+  prs: number;
 }
 
 /** Route shapes keyed by local date (YYYY-MM-DD); stored apart from the card. */
@@ -78,6 +80,8 @@ export interface RouteShape {
   prs: number;
   /** Flat [x0, y0, x1, y1, …] in 0..1, north up. */
   points: number[];
+  /** Strava visibility of the activity: 0 Everyone, 1 Followers, 2 Only You. Missing = treated as 2. */
+  level?: 0 | 1 | 2;
 }
 
 export interface RaceResult {
@@ -98,12 +102,18 @@ export interface YearCalendar {
   minutes: number[];
   prs: number[];
   races: RaceResult[];
+  /**
+   * The same year for each visitor audience (only activities they may see). The
+   * top-level series is the owner's. Missing on years cached before audiences
+   * existed: visitors then get the year rebuilt rather than the owner's version.
+   */
+  audiences?: Record<"link" | "public", { minutes: number[]; prs: number[]; races: RaceResult[] }>;
   /** ISO timestamp of the fetch. */
   fetchedAt: string;
 }
 
 /** Bump when the ScoutInputs shape changes; cached cards with another schema are re-scouted. */
-export const INPUTS_SCHEMA = 6;
+export const INPUTS_SCHEMA = 10;
 
 /**
  * Aggregated facts extracted from raw Strava payloads. The engine turns these
@@ -121,8 +131,6 @@ export interface ScoutInputs {
   windowHours: number;
   /** Elevation gain over the window, annualised to 365 days. */
   windowElevationM: number;
-  /** Estimated max heart rate (98th percentile of recorded maxima), if HR data exists. */
-  maxHeartRate: number | null;
   activeDaysLast30: number;
   activeWeeksLast12: number;
   lifetimeHours: number;
@@ -137,9 +145,8 @@ export interface ScoutInputs {
    * moving minutes and personal records set.
    */
   daily: { endDate: string; minutes: number[]; prs: number[] };
-  /** PRs and achievements (segment/best-effort awards) earned in the window. */
+  /** Personal records earned in the window (all sports; PRS itself only counts runs, rides and hikes). */
   prCount: number;
-  achievementCount: number;
   /** Activities Strava tags as races, most recent first (max 12). */
   races: RaceResult[];
 }
@@ -179,6 +186,10 @@ export interface PlayerCard {
   /** ISO timestamp of the last successful scout. */
   scoutedAt: string;
   engineVersion: number;
+  /** Which audience this card was built for (lib/audience.ts). The owner card holds every activity. */
+  audience?: "owner" | "link" | "public";
+  /** Owner card only: how the athlete's training splits across Strava visibility levels. */
+  privacy?: PrivacyMix;
 }
 
 /** Wrapper returned by the scout service so callers know how fresh the card is. */
@@ -200,4 +211,6 @@ export interface CardSettings {
   showCalendar: boolean;
   /** Let visitors open a day's route shape from the calendar. */
   showRoutes: boolean;
+  /** True while `visibility` is still the one we picked from their Strava privacy (cleared once they choose). */
+  autoVisibility?: boolean;
 }

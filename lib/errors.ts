@@ -70,6 +70,6 @@ export function errorResponse(err: unknown): Response {
     }
     return Response.json({ error: err.code, message: err.message }, { status: err.status, headers });
   }
-  console.error("[strava-fut] unexpected error", err);
+  console.error("[kudex] unexpected error", err);
   return Response.json({ error: "internal", message: "Something went wrong" }, { status: 500 });
 }

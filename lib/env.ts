@@ -23,10 +23,16 @@ export const env = {
     }
     return "dev-only-insecure-session-secret-change-me!!";
   },
-  /** Public origin, e.g. https://strava-fut.vercel.app. Falls back to the request origin. */
+  /** Public origin, e.g. https://kudex.vercel.app. Falls back to the request origin. */
   appUrl: process.env.APP_URL?.replace(/\/$/, "") || null,
   /** Shared secret Strava echoes back when verifying the webhook subscription. */
   webhookVerifyToken: process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || null,
+  /**
+   * Id Strava returned when the webhook subscription was created. Events without
+   * it are ignored, so a forged POST can't trigger deletes or scouts. Required in
+   * production for the webhook to act at all.
+   */
+  webhookSubscriptionId: process.env.STRAVA_WEBHOOK_SUBSCRIPTION_ID ? Number(process.env.STRAVA_WEBHOOK_SUBSCRIPTION_ID) : null,
   /** Upstash / Vercel KV REST credentials. Absent → in-memory cache (dev only). */
   redisUrl: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || null,
   redisToken: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || null,

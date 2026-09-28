@@ -1,3 +1,5 @@
+import { FindCard } from "@/components/FindCard";
+
 export default function PlayerNotFound() {
   return (
     <main className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
@@ -11,6 +13,7 @@ export default function PlayerNotFound() {
       <a href="/api/auth/strava" className="rounded-lg bg-strava px-5 py-2.5 text-sm font-semibold text-white">
         Connect with Strava
       </a>
+      <FindCard className="mt-6 w-full max-w-sm text-left" />
     </main>
   );
 }
