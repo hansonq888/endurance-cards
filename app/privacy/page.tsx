@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PoweredByStrava } from "@/components/StravaBrand";
 import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
 import { SectionHeading } from "@/components/SectionHeading";
@@ -61,9 +62,10 @@ const SECTIONS: { title: string; items: string[] }[] = [
   {
     title: "Cookies and third parties",
     items: [
-      "One sign-in cookie so the site knows it's you, and a short-lived one during sign-in. No ads, no analytics trackers.",
+      "One sign-in cookie so the site knows it's you, and a short-lived one during sign-in. No ads, and no tracking cookies.",
+      "We count visits with Vercel Web Analytics: anonymous, cookie-free page-view counts (which page, the referring site, rough country and device type). It doesn't identify you or follow you to other sites, and secret share links are masked before anything is sent.",
       "Your data is used only to build your card. We don't sell it, share it with anyone else, or use it to train AI models.",
-      "Services involved: Strava (the data source), and our hosting and database providers, which store it for us.",
+      "Services involved: Strava (the data source), Vercel (hosting and visit counts) and Upstash (the database that stores your card for us).",
       "Kudex is not affiliated with or endorsed by Strava. Strava data is used under the Strava API Agreement.",
     ],
   },
@@ -101,7 +103,10 @@ export default function PrivacyPage() {
         ))}
       </div>
 
-      <footer className="mt-16 text-center text-xs text-muted">Powered by Strava · Not affiliated with Strava</footer>
+      <footer className="mt-16 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
+        <PoweredByStrava />
+        <span>Not affiliated with Strava</span>
+      </footer>
     </main>
   );
 }

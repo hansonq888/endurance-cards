@@ -1,4 +1,5 @@
 import { FindCard } from "@/components/FindCard";
+import { ConnectWithStrava } from "@/components/StravaBrand";
 
 export default function PlayerNotFound() {
   return (
@@ -8,11 +9,7 @@ export default function PlayerNotFound() {
       <p className="text-sm text-muted">
         Strava only shares data for athletes who connect their own account. If this is you, connect to generate your card.
       </p>
-      {/* Full-page navigation: the route redirects off-site to Strava's OAuth screen. */}
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/api/auth/strava" className="rounded-lg bg-strava px-5 py-2.5 text-sm font-semibold text-white">
-        Connect with Strava
-      </a>
+      <ConnectWithStrava />
       <FindCard className="mt-6 w-full max-w-sm text-left" />
     </main>
   );

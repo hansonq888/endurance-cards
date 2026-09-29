@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { CardFan } from "@/components/CardFan";
 import { FindCard } from "@/components/FindCard";
+import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Marquee } from "@/components/home/Marquee";
 import { TopoBackdrop } from "@/components/home/TopoBackdrop";
@@ -21,22 +22,6 @@ const ERRORS: Record<string, string> = {
 };
 
 const MARQUEE = ["Rated out of 99", "Six stats", "Four tiers", "Twelve trophies", "Every sport counts", "Built from your Strava"];
-
-/** Primary call to action. Full-page navigation on purpose: the route redirects off-site to Strava's OAuth screen. */
-function ConnectButton({ className = "", style }: { className?: string; style?: CSSProperties }) {
-  return (
-    // Replace with Strava's official "Connect with Strava" button asset before a wider launch (brand guidelines).
-    // eslint-disable-next-line @next/next/no-html-link-for-pages
-    <a
-      href="/api/auth/strava"
-      style={style}
-      className={`group inline-flex items-center gap-3 rounded-xl bg-strava px-7 py-4 text-base font-semibold text-white shadow-xl shadow-strava/25 transition hover:-translate-y-0.5 hover:brightness-110 ${className}`}
-    >
-      Connect with Strava
-      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
-    </a>
-  );
-}
 
 function PrivacyNote({ className = "", style }: { className?: string; style?: CSSProperties }) {
   return (
@@ -133,7 +118,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
               </p>
             )}
 
-            <ConnectButton className="rise mt-8" style={{ "--d": "360ms" } as CSSProperties} />
+            <ConnectWithStrava className="rise mt-8" height={52} style={{ "--d": "360ms" } as CSSProperties} />
             <PrivacyNote className="rise mt-4" style={{ "--d": "440ms" } as CSSProperties} />
 
             <CardFan cards={[silver, gold, icon]} className="mt-14 sm:mt-16" />
@@ -172,7 +157,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
                 <br />
                 <span className="text-strava">is waiting</span>
               </h2>
-              <ConnectButton className="mt-8" />
+              <ConnectWithStrava className="mt-8" height={52} />
               <PrivacyNote className="mt-4" />
             </div>
             <FindCard />
@@ -180,8 +165,9 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
-      <footer className="mx-auto flex max-w-6xl justify-center gap-4 px-4 pb-10 text-xs text-muted">
-        <span>Powered by Strava · Not affiliated with Strava</span>
+      <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-10 text-xs text-muted">
+        <PoweredByStrava />
+        <span>Not affiliated with Strava</span>
         <Link href="/privacy" className="hover:text-foreground">
           Privacy
         </Link>

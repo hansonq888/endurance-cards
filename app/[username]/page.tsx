@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { PoweredByStrava } from "@/components/StravaBrand";
 import type { Metadata } from "next";
 import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
@@ -188,8 +189,8 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
         </div>
       )}
 
-      <footer className="mt-12 flex justify-center gap-4 text-xs text-muted">
-        <span>Powered by Strava</span>
+      <footer className="mt-12 flex items-center justify-center gap-4 text-xs text-muted">
+        <PoweredByStrava />
         <Link href="/privacy" className="hover:text-foreground">
           Privacy
         </Link>
