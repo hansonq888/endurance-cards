@@ -425,7 +425,19 @@ export function ActivityHeatmap({
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted">
             <p aria-live="polite" className="min-h-4">
-              {caption ?? (view === "grid" ? `Hover a day for details${routesEnabled ? " · click to see its route" : ""}` : "Hover a week for details")}
+              {caption ??
+                (view === "grid" ? (
+                  <>
+                    {/* Touchscreens can't hover: say "tap" there. */}
+                    <span className="pointer-coarse:hidden">Hover a day for details{routesEnabled && " · click to see its route"}</span>
+                    <span className="hidden pointer-coarse:inline">Tap a day for details{routesEnabled && " and its route"}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="pointer-coarse:hidden">Hover a week for details</span>
+                    <span className="hidden pointer-coarse:inline">Tap a week for details</span>
+                  </>
+                ))}
             </p>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">

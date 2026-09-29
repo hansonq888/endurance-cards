@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BRAND } from "@/lib/brand";
 import { Geist, Geist_Mono, Mona_Sans } from "next/font/google";
 import localFont from "next/font/local";
+import { SiteAnalytics } from "@/components/SiteAnalytics";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,7 +42,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${monaSans.variable} ${barlow.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <SiteAnalytics />
+      </body>
     </html>
   );
 }

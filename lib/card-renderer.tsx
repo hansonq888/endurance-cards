@@ -40,9 +40,16 @@ const PNG_FONTS = {
   body: { fontFamily: "Barlow" },
 };
 
-const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com)$/i;
+/**
+ * Where Strava profile photos live: its own CDNs, plus Google and Facebook for
+ * accounts that signed up with them. Only these are fetched (the renderer runs
+ * server-side, so it shouldn't fetch arbitrary URLs).
+ */
+const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com|googleusercontent\.com|fbcdn\.net|fbsbx\.com|facebook\.com)$/i;
+/** The PNG renderer (Satori) decodes these; anything else is skipped rather than breaking the image. */
+const AVATAR_TYPES = /^image\/(jpeg|jpg|png|gif)/i;
 
-/** Inlines the avatar so a slow/broken Strava CDN can't fail the whole render. */
+/** Inlines the avatar so a slow or odd photo URL can't fail the whole render (it falls back to initials). */
 async function avatarDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
   if (isDemoAvatar(url)) {
@@ -50,28 +57,115 @@ async function avatarDataUri(url: string | null): Promise<string | null> {
     const buf = await readFile(join(process.cwd(), "public", url)).catch(() => null);
     return buf ? `data:image/jpeg;base64,${buf.toString("base64")}` : null;
   }
-  try {
-    const { protocol, hostname } = new URL(url);
-    if (protocol !== "https:" || !AVATAR_HOSTS.test(hostname)) return null;
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    const type = res.headers.get("content-type") ?? "";
-    if (!res.ok || !type.startsWith("image/")) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > 400_000) return null;
-    return `data:${type};base64,${buf.toString("base64")}`;
-  } catch {
+  const skip = (reason: string) => {
+    console.warn(`[kudex] card image without photo (${reason}): ${safeHost(url)}`);
     return null;
+  };
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:") parsed.protocol = "https:"; // some older Strava photo URLs are plain http
+    if (parsed.protocol !== "https:") return skip("not https");
+    if (!AVATAR_HOSTS.test(parsed.hostname)) return skip("host not allowed");
+    const res = await fetch(parsed, { signal: AbortSignal.timeout(6000), redirect: "follow" });
+    const type = res.headers.get("content-type") ?? "";
+    if (!res.ok) return skip(`HTTP ${res.status}`);
+    if (!AVATAR_TYPES.test(type)) return skip(`type ${type || "unknown"}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 2_000_000) return skip("too large");
+    return `data:${type.split(";")[0]};base64,${buf.toString("base64")}`;
+  } catch (err) {
+    return skip((err as Error).name);
   }
 }
 
+/** Hostname only, for logs (photo URLs can carry ids). */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "invalid url";
+  }
+}
+
+const rgba = (hex: string, alpha: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
+
+/**
+ * The card as a printed object, for images people download and share: a thin
+ * light-catching edge (tier foil on holo cards), a diagonal glare, a baked-in
+ * foil band on Gold and Icon, and a soft drop shadow. The web card gets these
+ * live from TiltCard; a PNG has to have them painted in.
+ */
+function FinishedCard({ card, scale, avatar }: { card: PlayerCard; scale: number; avatar: string | null }) {
+  const t = TIER_THEMES[card.tier];
+  const radius = 16 * scale;
+  const edge = 1.6 * scale;
+  const [h1, h2, h3, h4] = t.holo;
+  const fill = { position: "absolute", top: 0, left: 0, width: CARD_W * scale, height: CARD_H * scale } as const;
+  return (
+    <div
+      style={{
+        display: "flex",
+        padding: edge,
+        borderRadius: radius + edge,
+        backgroundImage: t.holoCard
+          ? `linear-gradient(135deg, ${h1}, ${h2}, ${h3}, ${h4})`
+          : "linear-gradient(160deg, rgba(255,255,255,0.4), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.2))",
+        boxShadow: `0 ${14 * scale}px ${34 * scale}px rgba(0,0,0,0.55), 0 ${4 * scale}px ${10 * scale}px rgba(0,0,0,0.35)`,
+      }}
+    >
+      <div style={{ display: "flex", position: "relative", borderRadius: radius, overflow: "hidden" }}>
+        <CardFace card={card} u={(n) => n * scale} fonts={PNG_FONTS} avatarSrc={avatar} />
+        {t.holoCard && (
+          <div
+            style={{
+              ...fill,
+              backgroundImage: `linear-gradient(115deg, rgba(0,0,0,0) 18%, ${rgba(h1, 0.18)} 34%, ${rgba(h2, 0.22)} 44%, ${rgba(h3, 0.16)} 54%, ${rgba(h4, 0.14)} 64%, rgba(0,0,0,0) 80%)`,
+            }}
+          />
+        )}
+        <div
+          style={{
+            ...fill,
+            backgroundImage:
+              "linear-gradient(125deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 28%, rgba(255,255,255,0) 42%, rgba(255,255,255,0) 72%, rgba(255,255,255,0.08) 100%)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Room around the card (design units) for its shadow; more below, where the shadow falls. */
+const PNG_PAD = { x: 22, top: 16, bottom: 34 };
+
 export async function renderCardPng(card: PlayerCard, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
   const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
-  return new ImageResponse(<CardFace card={card} u={(n) => n * PNG_SCALE} fonts={PNG_FONTS} avatarSrc={avatar} />, {
-    width: CARD_W * PNG_SCALE,
-    height: CARD_H * PNG_SCALE,
-    fonts,
-    headers: init?.headers,
-  });
+  // Transparent canvas, so the card and its shadow sit naturally on any page, README or chat.
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          paddingTop: PNG_PAD.top * PNG_SCALE,
+        }}
+      >
+        <FinishedCard card={card} scale={PNG_SCALE} avatar={avatar} />
+      </div>
+    ),
+    {
+      width: (CARD_W + PNG_PAD.x * 2) * PNG_SCALE,
+      height: (CARD_H + PNG_PAD.top + PNG_PAD.bottom) * PNG_SCALE,
+      fonts,
+      headers: init?.headers,
+    },
+  );
 }
 
 /** Story format for Instagram / TikTok / Snapchat. */
@@ -98,7 +192,7 @@ function storyBackdrop(card: PlayerCard): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
-/** 1080×1920 story image: the card on a grainy tier gradient with the turtle and link. */
+/** 1080×1920 story image: the finished card on a grainy tier gradient, signed off with the turtle and link. */
 export async function renderStoryPng(card: PlayerCard, link: string, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
   const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
   const t = TIER_THEMES[card.tier];
@@ -107,20 +201,20 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", color: "#ece6da" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={storyBackdrop(card)} alt="" width={STORY_W} height={STORY_H} style={{ position: "absolute", top: 0, left: 0 }} />
-        {/* The turtle, tucked into the top-left corner. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={turtleDataUri(TURTLE_ON_DARK, 150)} alt="" width={150} height={150} style={{ position: "absolute", top: 56, left: 56 }} />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 150 }}>
           <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 700, letterSpacing: 8, color: "#a89d92" }}>
             {`${t.label.toUpperCase()} · ${t.terrain.toUpperCase()}`}
           </span>
           <span style={{ ...PNG_FONTS.display, fontSize: 64, marginTop: 14 }}>MY PLAYER CARD</span>
         </div>
-        <div style={{ display: "flex", marginTop: 70, borderRadius: 48, boxShadow: "0 40px 120px rgba(0,0,0,0.6)" }}>
-          <CardFace card={card} u={(n) => n * STORY_SCALE} fonts={PNG_FONTS} avatarSrc={avatar} />
+        <div style={{ display: "flex", alignItems: "flex-start", marginTop: 70 }}>
+          <FinishedCard card={card} scale={STORY_SCALE} avatar={avatar} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 130 }}>
-          <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 12 }}>{link}</span>
+        {/* Sign-off: the turtle with the link people can open underneath. */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 110 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={turtleDataUri(TURTLE_ON_DARK, 130)} alt="" width={130} height={130} />
+          <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 4 }}>{link}</span>
         </div>
       </div>
     ),

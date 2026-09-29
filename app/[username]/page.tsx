@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { PoweredByStrava } from "@/components/StravaBrand";
 import type { Metadata } from "next";
 import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
@@ -121,9 +122,12 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
             className="glow-in pointer-events-none absolute left-1/2 top-[40%] h-[70%] w-[140%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
             style={{ background: "radial-gradient(closest-side, rgba(252,76,2,0.55), transparent)" }}
           />
-          <TiltCard className="deal relative w-full max-w-[440px]" holo={TIER_THEMES[card.tier].holoCard ? holoVars(card.tier) : undefined}>
-            <PlayerCard card={card} className="w-full" />
-          </TiltCard>
+          {/* Dealt in on load (wrapper), then floats, catches the light and follows the phone's tilt (ambient). */}
+          <div className="deal relative w-full max-w-[440px]">
+            <TiltCard ambient holo={TIER_THEMES[card.tier].holoCard ? holoVars(card.tier) : undefined}>
+              <PlayerCard card={card} className="w-full" />
+            </TiltCard>
+          </div>
           <RatingTrend card={card} isOwner={isOwner} className="rise relative mt-6" style={{ "--d": "350ms" } as CSSProperties} />
           <div className="rise relative mt-5 text-center" style={{ "--d": "420ms" } as CSSProperties}>
             <h1 className="display text-2xl leading-none">{card.name}</h1>
@@ -185,8 +189,8 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
         </div>
       )}
 
-      <footer className="mt-12 flex justify-center gap-4 text-xs text-muted">
-        <span>Powered by Strava</span>
+      <footer className="mt-12 flex items-center justify-center gap-4 text-xs text-muted">
+        <PoweredByStrava />
         <Link href="/privacy" className="hover:text-foreground">
           Privacy
         </Link>

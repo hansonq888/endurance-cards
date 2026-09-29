@@ -226,3 +226,85 @@ body::after {
     animation: none;
   }
 }
+
+/* Home page marquee band: two copies of the list slide left by one copy's width. */
+.marquee-track {
+  animation: marquee 38s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
+
+/*
+ * Ambient card life (TiltCard ambient): an idle float (desynced per card via
+ * --float-delay), a light sweep every few seconds, and a faint drifting foil
+ * on holo cards. Hovering hands control back to the pointer.
+ */
+.card-float {
+  animation: card-float 7s ease-in-out var(--float-delay, 0s) infinite;
+}
+.card-float:hover {
+  animation-play-state: paused;
+}
+@keyframes card-float {
+  0%,
+  100% {
+    transform: perspective(900px) rotateX(3deg) rotateY(-5deg) translateY(0);
+  }
+  50% {
+    transform: perspective(900px) rotateX(-3deg) rotateY(5deg) translateY(-8px);
+  }
+}
+.card-shine {
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.28) 50%, transparent 62%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  mix-blend-mode: soft-light;
+  animation: card-shine 6.5s ease-in-out var(--float-delay, 0s) infinite;
+}
+@keyframes card-shine {
+  0% {
+    background-position: 160% 0;
+  }
+  28%,
+  100% {
+    background-position: -60% 0;
+  }
+}
+.holo-ambient {
+  opacity: 0.28;
+  animation: holo-drift 9s ease-in-out infinite alternate;
+}
+.card-float:hover .holo-ambient,
+.card-float:hover .card-shine {
+  opacity: 0;
+  transition: opacity 300ms;
+}
+@keyframes holo-drift {
+  from {
+    background-position: 10% 20%;
+  }
+  to {
+    background-position: 90% 80%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-float,
+  .card-shine,
+  .holo-ambient {
+    animation: none;
+  }
+  .card-shine {
+    display: none;
+  }
+}

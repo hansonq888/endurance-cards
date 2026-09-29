@@ -72,6 +72,14 @@ export function DayRoutes({
   return (
     <div className="mt-5 flex flex-col gap-6 border-t border-line pt-5 sm:flex-row sm:items-center">
       <div className="relative aspect-square w-full max-w-[200px] shrink-0 self-center sm:self-auto">
+        {/* A soft pool of the sport's colour behind the route. */}
+        {route && (
+          <div
+            aria-hidden
+            className="absolute inset-0 rounded-full"
+            style={{ background: `radial-gradient(circle, color-mix(in srgb, ${SPORT_COLORS[route.family]} 16%, transparent), transparent 65%)` }}
+          />
+        )}
         {route ? (
           <svg viewBox="0 0 100 100" className="relative h-full w-full" role="img" aria-label={`Route shape of ${route.name}`}>
             <path
@@ -81,6 +89,10 @@ export function DayRoutes({
               strokeWidth={2.6}
               strokeLinecap="round"
               strokeLinejoin="round"
+              // Glow in the route's own colour (no foil or gradient).
+              style={{
+                filter: `drop-shadow(0 0 2.5px ${SPORT_COLORS[route.family]}) drop-shadow(0 0 8px color-mix(in srgb, ${SPORT_COLORS[route.family]} 55%, transparent))`,
+              }}
             />
           </svg>
         ) : (

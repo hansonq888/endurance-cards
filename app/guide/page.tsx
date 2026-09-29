@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
 import type { Metadata } from "next";
 import { Wordmark } from "@/components/Wordmark";
 import { PlayerCard } from "@/components/PlayerCard";
@@ -92,10 +93,7 @@ export default function GuidePage() {
     <main className="mx-auto w-full max-w-[1320px] flex-1 overflow-x-clip px-4 py-8 sm:py-12">
       <nav className="mb-10 flex items-center justify-between">
         <Wordmark />
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/api/auth/strava" className="text-sm font-semibold text-strava hover:underline">
-          Get your card
-        </a>
+        <ConnectWithStrava height={36} glow={false} />
       </nav>
 
       <header className="mb-4 max-w-2xl">
@@ -212,7 +210,10 @@ export default function GuidePage() {
         </ul>
       </section>
 
-      <footer className="mt-12 text-center text-xs text-muted">Powered by Strava · Not affiliated with Strava</footer>
+      <footer className="mt-12 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
+        <PoweredByStrava />
+        <span>Not affiliated with Strava</span>
+      </footer>
     </main>
   );
 }
