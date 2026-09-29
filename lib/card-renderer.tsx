@@ -40,9 +40,16 @@ const PNG_FONTS = {
   body: { fontFamily: "Barlow" },
 };
 
-const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com)$/i;
+/**
+ * Where Strava profile photos live: its own CDNs, plus Google and Facebook for
+ * accounts that signed up with them. Only these are fetched (the renderer runs
+ * server-side, so it shouldn't fetch arbitrary URLs).
+ */
+const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com|googleusercontent\.com|fbcdn\.net|fbsbx\.com|facebook\.com)$/i;
+/** The PNG renderer (Satori) decodes these; anything else is skipped rather than breaking the image. */
+const AVATAR_TYPES = /^image\/(jpeg|jpg|png|gif)/i;
 
-/** Inlines the avatar so a slow/broken Strava CDN can't fail the whole render. */
+/** Inlines the avatar so a slow or odd photo URL can't fail the whole render (it falls back to initials). */
 async function avatarDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
   if (isDemoAvatar(url)) {
@@ -50,17 +57,33 @@ async function avatarDataUri(url: string | null): Promise<string | null> {
     const buf = await readFile(join(process.cwd(), "public", url)).catch(() => null);
     return buf ? `data:image/jpeg;base64,${buf.toString("base64")}` : null;
   }
-  try {
-    const { protocol, hostname } = new URL(url);
-    if (protocol !== "https:" || !AVATAR_HOSTS.test(hostname)) return null;
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    const type = res.headers.get("content-type") ?? "";
-    if (!res.ok || !type.startsWith("image/")) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > 400_000) return null;
-    return `data:${type};base64,${buf.toString("base64")}`;
-  } catch {
+  const skip = (reason: string) => {
+    console.warn(`[kudex] card image without photo (${reason}): ${safeHost(url)}`);
     return null;
+  };
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:") parsed.protocol = "https:"; // some older Strava photo URLs are plain http
+    if (parsed.protocol !== "https:") return skip("not https");
+    if (!AVATAR_HOSTS.test(parsed.hostname)) return skip("host not allowed");
+    const res = await fetch(parsed, { signal: AbortSignal.timeout(6000), redirect: "follow" });
+    const type = res.headers.get("content-type") ?? "";
+    if (!res.ok) return skip(`HTTP ${res.status}`);
+    if (!AVATAR_TYPES.test(type)) return skip(`type ${type || "unknown"}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 2_000_000) return skip("too large");
+    return `data:${type.split(";")[0]};base64,${buf.toString("base64")}`;
+  } catch (err) {
+    return skip((err as Error).name);
+  }
+}
+
+/** Hostname only, for logs (photo URLs can carry ids). */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "invalid url";
   }
 }
 
