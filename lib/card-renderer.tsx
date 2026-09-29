@@ -7,6 +7,7 @@ import { TURTLE_ON_DARK, turtleDataUri } from "./turtle";
 import { CardFace } from "./card-face";
 import { isDemoAvatar } from "./engine";
 import { CARD_H, CARD_W, PNG_SCALE, TIER_THEMES } from "./card-theme";
+import { contourPaths, SUMMIT } from "./topo";
 
 /**
  * Server-side PNG rendering via next/og (Satori + Resvg), using the same card
@@ -219,5 +220,73 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
       </div>
     ),
     { width: STORY_W, height: STORY_H, fonts, headers: init?.headers },
+  );
+}
+
+/** Social link-preview size (Open Graph / X large card). */
+export const OG_W = 1200;
+export const OG_H = 630;
+
+/** Faint topo contours for the preview background, from the same generator as the card art. */
+function ogBackdrop(): string {
+  const rings = contourPaths(7, 24)
+    .map((r) => `<path d="${r.d}" fill="none" stroke="#fc4c02" stroke-opacity="${r.index ? 0.3 : 0.13}" stroke-width="${r.index ? 1.3 : 0.8}"/>`)
+    .join("");
+  // Centre the summit behind the card fan (right of centre).
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_W}" height="${OG_H}" viewBox="${SUMMIT.x - 430} ${SUMMIT.y - 210} 600 315">
+<rect x="-2000" y="-2000" width="5000" height="5000" fill="#140f0c"/>
+<defs><radialGradient id="glow" cx="0.72" cy="0.55" r="0.5"><stop offset="0" stop-color="#fc4c02" stop-opacity="0.35"/><stop offset="1" stop-color="#fc4c02" stop-opacity="0"/></radialGradient></defs>
+${rings}
+<rect x="${SUMMIT.x - 430}" y="${SUMMIT.y - 210}" width="600" height="315" fill="url(#glow)"/>
+</svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
+/**
+ * The site's link preview: turtle and headline on the left, a fanned hand of
+ * finished demo cards on the right, over faint topo lines and a warm glow.
+ */
+export async function renderSiteOgImage(link: string, cards: [PlayerCard, PlayerCard, PlayerCard]): Promise<ImageResponse> {
+  const [fonts, ...avatars] = await Promise.all([loadFonts(), ...cards.map((c) => avatarDataUri(c.avatarUrl))]);
+  const scale = 0.9; // card ≈ 270 × 378
+  // Silver left, Gold centre (on top), Icon right.
+  const seats = [
+    { left: 668, top: 150, rotate: -9 },
+    { left: 782, top: 118, rotate: 0 },
+    { left: 895, top: 150, rotate: 9 },
+  ];
+  // Side cards first so the middle one paints on top.
+  const order = [0, 2, 1];
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", color: "#ece6da" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={ogBackdrop()} alt="" width={OG_W} height={OG_H} style={{ position: "absolute", top: 0, left: 0 }} />
+        <div style={{ position: "absolute", left: 72, top: 0, bottom: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={turtleDataUri(TURTLE_ON_DARK, 220)} alt="" width={220} height={220} style={{ margin: "-38px -34px -38px -50px" }} />
+            <div style={{ display: "flex", flexDirection: "column", ...PNG_FONTS.display, fontSize: 66, lineHeight: 0.9, letterSpacing: -2 }}>
+              <span>YOUR</span>
+              <span>TRAINING</span>
+              <span style={{ color: "#fc4c02" }}>RATED 99</span>
+            </div>
+          </div>
+          <span style={{ ...PNG_FONTS.body, fontSize: 27, fontWeight: 500, color: "#a89d92", marginTop: 34, maxWidth: 500 }}>
+            Your Strava year as a player card: six stats, four tiers, twelve trophies.
+          </span>
+          <span style={{ ...PNG_FONTS.body, fontSize: 24, fontWeight: 700, letterSpacing: 2, color: "#fc4c02", marginTop: 26 }}>{link}</span>
+        </div>
+        {order.map((i) => (
+          <div
+            key={i}
+            style={{ position: "absolute", left: seats[i].left, top: seats[i].top, display: "flex", transform: `rotate(${seats[i].rotate}deg)` }}
+          >
+            <FinishedCard card={cards[i]} scale={scale} avatar={avatars[i]} />
+          </div>
+        ))}
+      </div>
+    ),
+    { width: OG_W, height: OG_H, fonts },
   );
 }

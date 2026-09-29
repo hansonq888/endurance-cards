@@ -37,6 +37,8 @@ export const metadata: Metadata = {
   title: { default: `${BRAND.name} — ${BRAND.tagline}`, template: `%s · ${BRAND.name}` },
   description: "Turn your Strava history into a player card rated out of 99.",
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
+  // Large previews on X; the image itself comes from app/opengraph-image.tsx (profile pages use their card).
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
