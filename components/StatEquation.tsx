@@ -1,4 +1,5 @@
 import type { AttributeKey } from "@/types/player";
+import { StatChip } from "./StatChip";
 import { STAT_ICONS } from "./StatIcons";
 
 export interface StatEquationItem {
@@ -28,9 +29,7 @@ export function StatEquation({ items }: { items: StatEquationItem[] }) {
                 +
               </span>
             )}
-            <span className="rounded-full border border-line px-3 py-1 text-xs tabular-nums">
-              {s.key} <span className="text-muted">{s.weight}%</span>
-            </span>
+            <StatChip statKey={s.key} weight={s.weight} size="lg" />
           </span>
         ))}
       </div>

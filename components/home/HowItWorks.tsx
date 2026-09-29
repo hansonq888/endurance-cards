@@ -1,5 +1,7 @@
 import { Link2, Smartphone, Code2 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
+import { StatChip } from "@/components/StatChip";
+import { ATTRIBUTE_KEYS } from "@/types/player";
 
 function Step({ n, title, children, delay }: { n: number; title: string; children: ReactNode; delay: number }) {
   return (
@@ -20,6 +22,11 @@ export function HowItWorks() {
       </Step>
       <Step n={2} title="Get rated" delay={80}>
         <p>Six stats, each 1–99, judged against people who do your sports. Plus an overall, a tier and trophies.</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {ATTRIBUTE_KEYS.map((k) => (
+            <StatChip key={k} statKey={k} />
+          ))}
+        </div>
       </Step>
       <Step n={3} title="Share it" delay={160}>
         <p>A card image, a story for Instagram, a link or a README embed. Visitors only see what Strava already shows them.</p>
