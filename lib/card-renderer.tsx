@@ -64,14 +64,85 @@ async function avatarDataUri(url: string | null): Promise<string | null> {
   }
 }
 
+const rgba = (hex: string, alpha: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
+
+/**
+ * The card as a printed object, for images people download and share: a thin
+ * light-catching edge (tier foil on holo cards), a diagonal glare, a baked-in
+ * foil band on Gold and Icon, and a soft drop shadow. The web card gets these
+ * live from TiltCard; a PNG has to have them painted in.
+ */
+function FinishedCard({ card, scale, avatar }: { card: PlayerCard; scale: number; avatar: string | null }) {
+  const t = TIER_THEMES[card.tier];
+  const radius = 16 * scale;
+  const edge = 1.6 * scale;
+  const [h1, h2, h3, h4] = t.holo;
+  const fill = { position: "absolute", top: 0, left: 0, width: CARD_W * scale, height: CARD_H * scale } as const;
+  return (
+    <div
+      style={{
+        display: "flex",
+        padding: edge,
+        borderRadius: radius + edge,
+        backgroundImage: t.holoCard
+          ? `linear-gradient(135deg, ${h1}, ${h2}, ${h3}, ${h4})`
+          : "linear-gradient(160deg, rgba(255,255,255,0.4), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.2))",
+        boxShadow: `0 ${14 * scale}px ${34 * scale}px rgba(0,0,0,0.55), 0 ${4 * scale}px ${10 * scale}px rgba(0,0,0,0.35)`,
+      }}
+    >
+      <div style={{ display: "flex", position: "relative", borderRadius: radius, overflow: "hidden" }}>
+        <CardFace card={card} u={(n) => n * scale} fonts={PNG_FONTS} avatarSrc={avatar} />
+        {t.holoCard && (
+          <div
+            style={{
+              ...fill,
+              backgroundImage: `linear-gradient(115deg, rgba(0,0,0,0) 18%, ${rgba(h1, 0.18)} 34%, ${rgba(h2, 0.22)} 44%, ${rgba(h3, 0.16)} 54%, ${rgba(h4, 0.14)} 64%, rgba(0,0,0,0) 80%)`,
+            }}
+          />
+        )}
+        <div
+          style={{
+            ...fill,
+            backgroundImage:
+              "linear-gradient(125deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 28%, rgba(255,255,255,0) 42%, rgba(255,255,255,0) 72%, rgba(255,255,255,0.08) 100%)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Room around the card (design units) for its shadow; more below, where the shadow falls. */
+const PNG_PAD = { x: 22, top: 16, bottom: 34 };
+
 export async function renderCardPng(card: PlayerCard, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
   const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
-  return new ImageResponse(<CardFace card={card} u={(n) => n * PNG_SCALE} fonts={PNG_FONTS} avatarSrc={avatar} />, {
-    width: CARD_W * PNG_SCALE,
-    height: CARD_H * PNG_SCALE,
-    fonts,
-    headers: init?.headers,
-  });
+  // Transparent canvas, so the card and its shadow sit naturally on any page, README or chat.
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
+          paddingTop: PNG_PAD.top * PNG_SCALE,
+        }}
+      >
+        <FinishedCard card={card} scale={PNG_SCALE} avatar={avatar} />
+      </div>
+    ),
+    {
+      width: (CARD_W + PNG_PAD.x * 2) * PNG_SCALE,
+      height: (CARD_H + PNG_PAD.top + PNG_PAD.bottom) * PNG_SCALE,
+      fonts,
+      headers: init?.headers,
+    },
+  );
 }
 
 /** Story format for Instagram / TikTok / Snapchat. */
@@ -116,8 +187,8 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
           </span>
           <span style={{ ...PNG_FONTS.display, fontSize: 64, marginTop: 14 }}>MY PLAYER CARD</span>
         </div>
-        <div style={{ display: "flex", marginTop: 70, borderRadius: 48, boxShadow: "0 40px 120px rgba(0,0,0,0.6)" }}>
-          <CardFace card={card} u={(n) => n * STORY_SCALE} fonts={PNG_FONTS} avatarSrc={avatar} />
+        <div style={{ display: "flex", alignItems: "flex-start", marginTop: 70 }}>
+          <FinishedCard card={card} scale={STORY_SCALE} avatar={avatar} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 130 }}>
           <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 12 }}>{link}</span>
