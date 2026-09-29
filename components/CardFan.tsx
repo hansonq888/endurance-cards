@@ -16,7 +16,7 @@ export function CardFan({ cards, className = "" }: { cards: [PlayerCardData, Pla
   const [left, middle, right] = cards;
   const side = "deal z-0 w-[34%] shrink-0 translate-y-4 opacity-90 transition-opacity hover:z-20 hover:opacity-100";
   return (
-    <div className={`mx-auto flex w-full max-w-[480px] items-center justify-center py-6 ${className}`}>
+    <div className={`mx-auto flex w-full max-w-[540px] items-center justify-center py-6 ${className}`}>
       <TiltCard style={{ "--d": "380ms", "--deal-r": "-10deg" } as CSSProperties} className={`${side} -rotate-6`} holo={holoFor(left)}>
         <PlayerCard card={left} className="w-full" />
       </TiltCard>

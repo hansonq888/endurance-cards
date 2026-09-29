@@ -226,3 +226,21 @@ body::after {
     animation: none;
   }
 }
+
+/* Home page marquee band: two copies of the list slide left by one copy's width. */
+.marquee-track {
+  animation: marquee 38s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
