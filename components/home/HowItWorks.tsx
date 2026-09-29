@@ -1,7 +1,5 @@
 import { Link2, Smartphone, Code2 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { STAT_ICONS } from "@/components/StatIcons";
-import { ATTRIBUTE_KEYS } from "@/types/player";
 
 function Step({ n, title, children, delay }: { n: number; title: string; children: ReactNode; delay: number }) {
   return (
@@ -22,17 +20,6 @@ export function HowItWorks() {
       </Step>
       <Step n={2} title="Get rated" delay={80}>
         <p>Six stats, each 1–99, judged against people who do your sports. Plus an overall, a tier and trophies.</p>
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {ATTRIBUTE_KEYS.map((k) => {
-            const Icon = STAT_ICONS[k];
-            return (
-              <span key={k} className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[11px] text-foreground">
-                <Icon className="h-3 w-3 text-strava" aria-hidden />
-                {k}
-              </span>
-            );
-          })}
-        </div>
       </Step>
       <Step n={3} title="Share it" delay={160}>
         <p>A card image, a story for Instagram, a link or a README embed. Visitors only see what Strava already shows them.</p>
