@@ -126,6 +126,8 @@ const k = {
   legacyCardView: (id: number, view: "link" | "public") => `${PREFIX}card:${id}:${view}`,
   /** Set by the webhook when an activity changes; forces the next view to re-scout. */
   dirty: (id: number) => `${PREFIX}dirty:${id}`,
+  /** Last rendered share image of each kind, with the card version it was drawn from. */
+  image: (id: number, kind: ImageKind) => `${PREFIX}img:${id}:${kind}`,
   /** Debounce for webhook-triggered scouts. */
   webhookScout: (id: number) => `${PREFIX}webhook-scout:${id}`,
   /** Never expires: what we need to find every key of an athlete when deleting them, even after the card expired. */
@@ -165,6 +167,21 @@ export async function saveCard(card: PlayerCard, previousSlug?: string): Promise
   if (previousSlug && previousSlug.toLowerCase() !== card.slug.toLowerCase()) {
     await s.del(k.slug(previousSlug));
   }
+}
+
+// ---------- Rendered share images ----------
+
+export type ImageKind = "card" | "story";
+const IMAGE_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+/** A previously rendered image, if it was drawn from this exact card version. */
+export async function getRenderedImage(athleteId: number, kind: ImageKind, version: string): Promise<Buffer | null> {
+  const hit = await store().get<{ v: string; b64: string }>(k.image(athleteId, kind));
+  return hit && hit.v === version ? Buffer.from(hit.b64, "base64") : null;
+}
+
+export async function saveRenderedImage(athleteId: number, kind: ImageKind, version: string, bytes: Buffer): Promise<void> {
+  await store().set(k.image(athleteId, kind), { v: version, b64: bytes.toString("base64") }, { ex: IMAGE_TTL_SECONDS });
 }
 
 /** Webhook → "something changed on Strava; rebuild before trusting the cache". */
@@ -241,6 +258,8 @@ export async function deleteAthlete(athleteId: number, slugs: string[] = []): Pr
     ...years.flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]),
     k.routes(athleteId, "recent"),
     k.webhookScout(athleteId),
+    k.image(athleteId, "card"),
+    k.image(athleteId, "story"),
     k.meta(athleteId),
     ...[...slugs, ...(meta?.slugs ?? [])].map((slug) => k.slug(slug)),
   ];
