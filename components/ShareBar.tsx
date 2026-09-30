@@ -49,6 +49,39 @@ export function ShareBar({
   const closeSaveMenu = () => {
     if (saveMenu.current) saveMenu.current.open = false;
   };
+
+  // Phones: saving goes through the share sheet ("Save Image" → Photos, or straight to Instagram).
+  // iOS only opens it right after a tap, so the images are fetched as soon as the menu opens.
+  const blobs = useRef(new Map<string, Promise<Blob>>());
+  const fetchBlob = (url: string) => {
+    let pending = blobs.current.get(url);
+    if (!pending) {
+      pending = fetch(url).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`HTTP ${r.status}`))));
+      pending.catch(() => blobs.current.delete(url)); // let a later tap retry
+      blobs.current.set(url, pending);
+    }
+    return pending;
+  };
+  const onPhone = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !!navigator.canShare;
+
+  async function save(e: React.MouseEvent<HTMLAnchorElement>, url: string, filename: string) {
+    closeSaveMenu();
+    if (!onPhone()) return; // computers: the link's normal download
+    e.preventDefault();
+    try {
+      const file = new File([await fetchBlob(url)], filename, { type: "image/png" });
+      if (!navigator.canShare({ files: [file] })) throw new Error("files not shareable");
+      // Image only (no text or link), so the sheet offers "Save Image".
+      await navigator.share({ files: [file] });
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return; // closed the sheet
+      // Anything else: fall back to a plain download.
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+    }
+  }
   const text = `${name}'s ${BRAND.name} card: ${summary}`;
 
   async function copyLink() {
@@ -90,16 +123,27 @@ export function ShareBar({
         </button>
       )}
       {/* Both downloads behind one button: the card PNG and the 1080×1920 story. */}
-      <details ref={saveMenu} className="group relative">
+      <details
+        ref={saveMenu}
+        className="group relative"
+        onToggle={(e) => {
+          if (e.currentTarget.open && onPhone()) [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}));
+        }}
+      >
         <summary className={`${btn} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
           <Download className="h-3.5 w-3.5" aria-hidden /> Save
           <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" aria-hidden />
         </summary>
         <div className="absolute left-1/2 z-30 mt-1.5 w-44 -translate-x-1/2 rounded-lg border border-line bg-surface p-1 font-accent text-[11px] shadow-xl">
-          <a href={imageUrl} download={`${slug}-${BRAND.fileSlug}.png`} className={item} onClick={closeSaveMenu}>
+          <a href={imageUrl} download={`${slug}-${BRAND.fileSlug}.png`} className={item} onClick={(e) => save(e, imageUrl, `${slug}-${BRAND.fileSlug}.png`)}>
             <Download className="h-3.5 w-3.5" aria-hidden /> Card image
           </a>
-          <a href={storyUrl} download={`${slug}-${BRAND.fileSlug}-story.png`} className={item} onClick={closeSaveMenu}>
+          <a
+            href={storyUrl}
+            download={`${slug}-${BRAND.fileSlug}-story.png`}
+            className={item}
+            onClick={(e) => save(e, storyUrl, `${slug}-${BRAND.fileSlug}-story.png`)}
+          >
             <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story (1080×1920)
           </a>
         </div>

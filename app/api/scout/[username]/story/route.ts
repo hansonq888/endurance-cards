@@ -12,9 +12,8 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/scout/[usern
   try {
     const { card, viewer } = await getCardBySlug(username, await getSessionAthleteId());
     const host = new URL(env.appUrl ?? req.nextUrl.origin).host;
-    // The link printed on the story must be one its viewers can open: the secret link (private cards get just the site).
-    const link = viewer.settings.visibility === "private" ? host : `${host}/${viewer.shareSlug}`;
-    return await renderStoryPng(card, link, { headers: { "Cache-Control": cacheControlFor(viewer) } });
+    // The story is signed with just the site's address: it's meant to be posted, and the secret link stays private.
+    return await renderStoryPng(card, host, { headers: { "Cache-Control": cacheControlFor(viewer) } });
   } catch (err) {
     return errorResponse(err);
   }
