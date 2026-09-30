@@ -1,17 +1,18 @@
 import type { CSSProperties } from "react";
-import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
+import { ConnectWithStrava } from "@/components/StravaBrand";
 import type { Metadata } from "next";
 import { Wordmark } from "@/components/Wordmark";
 import { PlayerCard } from "@/components/PlayerCard";
 import { StatEquation } from "@/components/StatEquation";
 import { TiltCard } from "@/components/TiltCard";
 import { TrophyBadge } from "@/components/TrophyBadge";
-import { holoVars, TIER_THEMES } from "@/lib/card-theme";
+import { holoFor, holoVars, TIER_THEMES } from "@/lib/card-theme";
 import { buildCard, LEGACY_GATE, OVR_WEIGHTS, TIER_THRESHOLDS } from "@/lib/engine";
 import { RATING_BANDS, STAT_DETAIL } from "@/lib/explain";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { formatValue, TROPHIES } from "@/lib/trophies";
 import { ATTRIBUTE_KEYS, type AttributeKey, type CardTier } from "@/types/player";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "Guide",
@@ -113,7 +114,7 @@ export default function GuidePage() {
             const t = TIER_THEMES[tier];
             return (
               <div key={tier} className="deal flex flex-col items-center" style={{ "--d": `${250 + i * 110}ms` } as CSSProperties}>
-                <TiltCard className="w-full max-w-[260px]" holo={t.holoCard ? holoVars(tier) : undefined}>
+                <TiltCard className="w-full max-w-[260px]" holo={holoFor(tier)}>
                   <PlayerCard card={card} className="w-full" />
                 </TiltCard>
                 <p className="display mt-4 text-lg leading-none">{t.label}</p>
@@ -210,10 +211,7 @@ export default function GuidePage() {
         </ul>
       </section>
 
-      <footer className="mt-12 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
-        <PoweredByStrava />
-        <span>Not affiliated with Strava</span>
-      </footer>
+      <SiteFooter className="mt-12" />
     </main>
   );
 }

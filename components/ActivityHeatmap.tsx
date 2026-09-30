@@ -2,9 +2,12 @@
 
 import { BarChart3, LayoutGrid } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { RaceResult, YearCalendar } from "@/types/player";
+import type { RaceResult } from "@/types/player";
 import { fmtDuration, HEAT_STEPS, heatStep } from "@/lib/viz";
 import { DayRoutes } from "./DayRoutes";
+import { useYearCalendar } from "./useYearCalendar";
+import { PANEL } from "./ui";
+import { DAY_MS } from "@/lib/format";
 
 const CELL = 12;
 const GAP = 3;
@@ -12,7 +15,6 @@ const PITCH = CELL + GAP;
 const LEFT = 28; // weekday / axis labels
 const TOP = 18; // month labels
 const MARKS = 16; // headroom above bars for PR / race markers
-const DAY_MS = 86_400_000;
 /** Form compares the last 6 weeks with the 6 before. */
 const FORM_DAYS = 42;
 
@@ -80,35 +82,17 @@ export function ActivityHeatmap({
   recent: { endDate: string; minutes: number[]; prs: number[]; races: RaceResult[] };
 }) {
   const [period, setPeriod] = useState<"recent" | number>("recent");
-  const [loaded, setLoaded] = useState<Record<number, YearCalendar>>({});
-  const [status, setStatus] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
-  const data = period === "recent" ? recent : loaded[period];
+  const calendar = useYearCalendar(slug);
+  const year = period === "recent" ? undefined : calendar.years[period];
+  const data = period === "recent" ? recent : year && "data" in year ? year.data : undefined;
   const shown = data ?? recent;
   const { endDate, minutes, prs, races } = shown;
 
-  async function choose(next: "recent" | number) {
+  function choose(next: "recent" | number) {
     setPeriod(next);
     setHover(null);
     setPicked(null);
-    if (next === "recent" || loaded[next]) return setStatus({ loading: false, error: null });
-    setStatus({ loading: true, error: null });
-    try {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const res = await fetch(`/api/scout/${encodeURIComponent(slug)}/calendar?year=${next}`);
-        if (res.status === 409) {
-          // Someone else is loading this year right now — wait for their result.
-          await new Promise((r) => setTimeout(r, 1500));
-          continue;
-        }
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(errorMessage(res.status, body.message));
-        setLoaded((l) => ({ ...l, [next]: body as YearCalendar }));
-        return setStatus({ loading: false, error: null });
-      }
-      throw new Error("Still loading — try again in a moment.");
-    } catch (err) {
-      setStatus({ loading: false, error: (err as Error).message });
-    }
+    if (next !== "recent") calendar.load(next);
   }
 
   const [view, setView] = useState<"grid" | "bars">("grid");
@@ -256,7 +240,7 @@ export function ActivityHeatmap({
 
       {/* The title and view tabs sit open on the page; everything else lives in a panel like the other sections.
           Main column (stats, chart, day detail) with a controls sidebar on the right — above it on phones. */}
-      <div className="grain flex flex-col gap-5 rounded-2xl border border-line p-5 lg:flex-row lg:gap-8">
+      <div className={`${PANEL} flex flex-col gap-5 lg:flex-row lg:gap-8`}>
         <aside className={`shrink-0 lg:order-last lg:w-36 ${years.length ? "" : "hidden"}`}>
           {years.length > 0 && (
             // Years as a list: a sideways swipe row on phones, a vertical scroller beside the chart on desktop.
@@ -324,9 +308,9 @@ export function ActivityHeatmap({
             ))}
           </dl>
 
-          {(status.loading || status.error) && !data && (
+          {year && !data && (
             <p role="status" className="mb-3 text-xs text-muted">
-              {status.loading ? `Loading ${period} from Strava…` : status.error}
+              {"error" in year ? year.error : `Loading ${period} from Strava…`}
             </p>
           )}
 
@@ -467,11 +451,4 @@ export function ActivityHeatmap({
       </div>
     </div>
   );
-}
-
-function errorMessage(status: number, message?: string): string {
-  if (status === 429) return "Strava is busy right now — try again in a few minutes.";
-  if (status === 401) return "This athlete needs to reconnect Strava before older years can load.";
-  if (status === 404) return "No data for that year.";
-  return message ?? "Couldn't load that year. Try again.";
 }

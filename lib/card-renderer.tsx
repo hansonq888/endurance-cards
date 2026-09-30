@@ -52,7 +52,7 @@ const AVATAR_HOSTS = /(^|\.)(strava\.com|cloudfront\.net|stravacdn\.com|googleus
 const AVATAR_TYPES = /^image\/(jpeg|jpg|png|gif)/i;
 
 /** Inlines the avatar so a slow or odd photo URL can't fail the whole render (it falls back to initials). */
-async function avatarDataUri(url: string | null): Promise<string | null> {
+export async function avatarDataUri(url: string | null): Promise<string | null> {
   if (!url) return null;
   if (isDemoAvatar(url)) {
     // Bundled demo photo: read it from disk (traced into the PNG routes in next.config.ts).
@@ -143,8 +143,9 @@ function FinishedCard({ card, scale, avatar }: { card: PlayerCard; scale: number
 /** Room around the card (design units) for its shadow; more below, where the shadow falls. */
 const PNG_PAD = { x: 22, top: 16, bottom: 34 };
 
-export async function renderCardPng(card: PlayerCard, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
-  const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
+/** `avatar` may be passed pre-loaded (see avatarDataUri); otherwise it's fetched here. */
+export async function renderCardPng(card: PlayerCard, preloaded?: string | null): Promise<ImageResponse> {
+  const [fonts, avatar] = await Promise.all([loadFonts(), preloaded !== undefined ? preloaded : avatarDataUri(card.avatarUrl)]);
   // Transparent canvas, so the card and its shadow sit naturally on any page, README or chat.
   return new ImageResponse(
     (
@@ -165,14 +166,13 @@ export async function renderCardPng(card: PlayerCard, init?: { headers?: Record<
       width: (CARD_W + PNG_PAD.x * 2) * PNG_SCALE,
       height: (CARD_H + PNG_PAD.top + PNG_PAD.bottom) * PNG_SCALE,
       fonts,
-      headers: init?.headers,
     },
   );
 }
 
 /** Story format for Instagram / TikTok / Snapchat. */
-export const STORY_W = 1080;
-export const STORY_H = 1920;
+const STORY_W = 1080;
+const STORY_H = 1920;
 const STORY_SCALE = 3; // card is 900 × 1260 px
 
 /** Tier-tinted grainy gradient backdrop (Nike year-in-review style) as an SVG data URI. */
@@ -194,15 +194,19 @@ function storyBackdrop(card: PlayerCard): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
-/** 1080×1920 story image: the finished card on a grainy tier gradient, signed off with the turtle and link. */
 /** Strava's official white "Powered by Strava" logo, read from public/strava (unmodified). */
 async function poweredByStravaUri(): Promise<string | null> {
   const svg = await readFile(join(process.cwd(), "public", "strava", "powered-by-strava.svg")).catch(() => null);
   return svg ? `data:image/svg+xml;base64,${svg.toString("base64")}` : null;
 }
 
-export async function renderStoryPng(card: PlayerCard, link: string, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
-  const [fonts, avatar, poweredBy] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl), poweredByStravaUri()]);
+/** 1080×1920 story image: the finished card on a grainy tier gradient, signed off with the turtle and link. */
+export async function renderStoryPng(card: PlayerCard, link: string, preloaded?: string | null): Promise<ImageResponse> {
+  const [fonts, avatar, poweredBy] = await Promise.all([
+    loadFonts(),
+    preloaded !== undefined ? preloaded : avatarDataUri(card.avatarUrl),
+    poweredByStravaUri(),
+  ]);
   const t = TIER_THEMES[card.tier];
   return new ImageResponse(
     (
@@ -231,7 +235,7 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
         </div>
       </div>
     ),
-    { width: STORY_W, height: STORY_H, fonts, headers: init?.headers },
+    { width: STORY_W, height: STORY_H, fonts },
   );
 }
 

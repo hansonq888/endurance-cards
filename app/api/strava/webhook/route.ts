@@ -1,7 +1,7 @@
 import { after, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { StravaAuthError } from "@/lib/errors";
-import { claimWebhookScout, getCachedCard, getTokens, markDirty } from "@/lib/redis";
+import { claimWebhookScout, forgetPastYears, getCachedCard, getTokens, markDirty } from "@/lib/redis";
 import { purgeAthlete, scoutAthlete } from "@/lib/scout";
 import { ensureFreshTokens, fetchAthlete } from "@/lib/strava";
 
@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
         }
       } else if (event.object_type === "activity" && (await getCachedCard(id))) {
         await markDirty(id);
+        // Hidden or deleted: it may sit in a cached past year, so rebuild those on next view.
+        const hidden = event.updates && ("private" in event.updates || "visibility" in event.updates);
+        if (event.aspect_type === "delete" || hidden) await forgetPastYears(id);
         if (await claimWebhookScout(id)) await scoutAthlete(id);
       }
     } catch (err) {

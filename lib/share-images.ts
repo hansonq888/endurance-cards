@@ -1,6 +1,6 @@
 import "server-only";
 import sharp from "sharp";
-import { renderCardPng, renderStoryPng } from "./card-renderer";
+import { avatarDataUri, renderCardPng, renderStoryPng } from "./card-renderer";
 import { getRenderedImage, saveRenderedImage, type ImageKind } from "./redis";
 import type { PlayerCard } from "@/types/player";
 
@@ -15,25 +15,35 @@ export interface ShareImage {
   contentType: string;
 }
 
+const CONTENT_TYPE: Record<ImageKind, string> = { card: "image/png", story: "image/jpeg" };
+
 const version = (card: PlayerCard, extra = "") => `${card.scoutedAt}|${card.engineVersion}|${extra}`;
 
-async function cached(card: PlayerCard, kind: ImageKind, v: string, render: () => Promise<ShareImage>): Promise<ShareImage> {
-  const contentType = kind === "story" ? "image/jpeg" : "image/png";
+async function cached(
+  card: PlayerCard,
+  kind: ImageKind,
+  v: string,
+  render: (avatar: string | null) => Promise<Buffer>,
+): Promise<ShareImage> {
+  const contentType = CONTENT_TYPE[kind];
   const hit = await getRenderedImage(card.athleteId, kind, v).catch(() => null);
   if (hit) return { bytes: hit, contentType };
-  const image = await render();
-  await saveRenderedImage(card.athleteId, kind, v, image.bytes).catch((err) =>
-    console.warn(`[kudex] couldn't cache ${kind} image:`, (err as Error).message),
-  );
-  return image;
+  const avatar = await avatarDataUri(card.avatarUrl);
+  const bytes = await render(avatar);
+  // A photo that failed to load renders as initials; don't keep that for a week, retry next time.
+  if (avatar || !card.avatarUrl) {
+    await saveRenderedImage(card.athleteId, kind, v, bytes).catch((err) =>
+      console.warn(`[kudex] couldn't cache ${kind} image:`, (err as Error).message),
+    );
+  }
+  return { bytes, contentType };
 }
+
+const toBuffer = async (res: Response) => Buffer.from(await res.arrayBuffer());
 
 /** Transparent PNG of the finished card. */
 export function cardImage(card: PlayerCard): Promise<ShareImage> {
-  return cached(card, "card", version(card), async () => ({
-    bytes: Buffer.from(await (await renderCardPng(card)).arrayBuffer()),
-    contentType: "image/png",
-  }));
+  return cached(card, "card", version(card), async (avatar) => toBuffer(await renderCardPng(card, avatar)));
 }
 
 /**
@@ -41,8 +51,15 @@ export function cardImage(card: PlayerCard): Promise<ShareImage> {
  * the JPEG ~240 KB with no visible difference.
  */
 export function storyImage(card: PlayerCard, host: string): Promise<ShareImage> {
-  return cached(card, "story", version(card, host), async () => {
-    const png = Buffer.from(await (await renderStoryPng(card, host)).arrayBuffer());
-    return { bytes: await sharp(png).jpeg({ quality: 90, mozjpeg: true }).toBuffer(), contentType: "image/jpeg" };
+  return cached(card, "story", version(card, host), async (avatar) => {
+    const png = await toBuffer(await renderStoryPng(card, host, avatar));
+    return sharp(png).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+  });
+}
+
+/** The HTTP response for a share image. */
+export function imageResponse({ bytes, contentType }: ShareImage, cacheControl: string, extra: Record<string, string> = {}): Response {
+  return new Response(new Uint8Array(bytes), {
+    headers: { "Content-Type": contentType, "Cache-Control": cacheControl, ...extra },
   });
 }

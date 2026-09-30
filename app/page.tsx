@@ -2,12 +2,13 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { CardFan } from "@/components/CardFan";
-import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
+import { ConnectWithStrava } from "@/components/StravaBrand";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Marquee } from "@/components/home/Marquee";
 import { TopoBackdrop } from "@/components/home/TopoBackdrop";
 import { TurtleMark } from "@/components/TurtleMark";
 import { demoCards } from "@/lib/demo-cards";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const ERRORS: Record<string, string> = {
   denied: "You declined the Strava connection. No data was stored.",
@@ -138,13 +139,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
-      <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-10 text-xs text-muted">
-        <PoweredByStrava />
-        <span>Not affiliated with Strava</span>
-        <Link href="/privacy" className="hover:text-foreground">
-          Privacy
-        </Link>
-      </footer>
+      <SiteFooter className="mx-auto max-w-6xl px-4 pb-10" />
     </main>
   );
 }

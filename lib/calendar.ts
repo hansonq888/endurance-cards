@@ -1,7 +1,8 @@
 import "server-only";
 import { resolveViewer } from "./access";
 import { SHARED_MAX_LEVEL, sharedActivities } from "./sharing";
-import { dailySeries, routesByDay } from "./engine";
+import { dailySeries, routesByDay, WINDOW_DAYS } from "./engine";
+import { DAY_MS } from "./format";
 import { AppError, NotFoundError, StravaAuthError } from "./errors";
 import {
   acquireCalendarLock,
@@ -33,7 +34,7 @@ export function calendarYears(card: Pick<PlayerCard, "memberSince" | "inputs">, 
   return years;
 }
 
-export class CalendarBusyError extends AppError {
+class CalendarBusyError extends AppError {
   constructor() {
     super("That year is already loading — try again in a moment", 409, "calendar_busy");
   }
@@ -90,7 +91,10 @@ export async function getRoutesForDay(slug: string, date: string, sessionAthlete
   }
   const { athleteId } = viewer;
   const recent = await getRoutes(athleteId, "recent");
-  const routes = recent?.[date] ?? (await getRoutes(athleteId, Number(date.slice(0, 4))))?.[date] ?? [];
+  // Inside the rolling window only the fresh "recent" bucket counts: an older year bucket may
+  // still hold an activity that has since been hidden on Strava.
+  const inWindow = recent && Date.parse(`${date}T00:00:00Z`) >= Date.now() - (WINDOW_DAYS + 1) * DAY_MS;
+  const routes = inWindow ? (recent[date] ?? []) : ((await getRoutes(athleteId, Number(date.slice(0, 4))))?.[date] ?? []);
   // Only You routes aren't stored any more; the filter also covers buckets saved before that
   // (untagged shapes count as Only You).
   return routes.filter((r) => (r.level ?? 2) <= SHARED_MAX_LEVEL);
@@ -98,7 +102,7 @@ export async function getRoutesForDay(slug: string, date: string, sessionAthlete
 
 /** A finished year's daily series, from the (already shared-only) activities given. */
 export function yearCalendar(activities: StravaSummaryActivity[], year: number, fetchedAt: Date): YearCalendar {
-  const days = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000;
+  const days = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / DAY_MS;
   const endDate = `${year}-12-31`;
   return { year, endDate, ...dailySeries(activities, endDate, days), shared: true, fetchedAt: fetchedAt.toISOString() };
 }

@@ -19,15 +19,17 @@ import { decrypt, encrypt } from "./crypto";
  *   webhook-scout:{id}    debounce for webhook-triggered scouts      TTL 120s
  *   cooldown:{athleteId}  manual re-scout cooldown  TTL COOLDOWN
  *   budget                last seen Strava rate-limit usage
- *   cal:{athleteId}:{yr}  YearCalendar JSON         no TTL (past years never change)
- *   routes:{id}:{bucket}  RoutesByDay (shapes only) bucket = "recent" (rolling window) or a year
+ *   cal:{athleteId}:{yr}  YearCalendar JSON         no TTL (dropped when an activity is deleted or hidden)
+ *   cal-lock:{id}:{yr}    one Strava fetch per past year at a time  TTL LOCK
+ *   routes:{id}:{bucket}  RoutesByDay (shape, name, stats; no coordinates) bucket = "recent" (rolling window) or a year
  *   settings:{athleteId}  CardSettings (visibility, share token, section toggles)  no TTL
+ *   img:{athleteId}:{kind} rendered card PNG / story JPEG + the card version it shows  TTL 7d
  */
 
 const PREFIX = "kudex:";
 const CARD_TTL_SECONDS = 60 * 60 * 24 * 30;
-export const CARD_FRESH_MS = 1000 * 60 * 60 * 24; // 24h
-export const RESCOUT_COOLDOWN_SECONDS = 60 * 10;
+const CARD_FRESH_MS = 1000 * 60 * 60 * 24; // 24h
+const RESCOUT_COOLDOWN_SECONDS = 60 * 10;
 /** Longer than the slowest scout (two passes of up to 5 calls with retries and 10 s timeouts). */
 const LOCK_TTL_SECONDS = 150;
 
@@ -184,12 +186,12 @@ export async function saveRenderedImage(athleteId: number, kind: ImageKind, vers
   await store().set(k.image(athleteId, kind), { v: version, b64: bytes.toString("base64") }, { ex: IMAGE_TTL_SECONDS });
 }
 
-/** Webhook → "something changed on Strava; rebuild before trusting the cache". */
 /** At most one webhook-triggered scout per athlete per window; later events just leave the card dirty. */
 export async function claimWebhookScout(athleteId: number): Promise<boolean> {
   return store().set(k.webhookScout(athleteId), 1, { ex: 120, nx: true });
 }
 
+/** Webhook → "something changed on Strava; rebuild before trusting the cache". */
 export async function markDirty(athleteId: number): Promise<void> {
   await store().set(k.dirty(athleteId), 1, { ex: 7 * 86_400 });
 }
@@ -234,8 +236,27 @@ export async function deleteTokens(athleteId: number): Promise<void> {
   await store().del(k.tokens(athleteId));
 }
 
-/** Strava launched in 2009; sweeping every year since means no calendar or route bucket is missed. */
+/** Strava launched in 2009: sweeping every year since means no calendar or route bucket is missed. */
 const FIRST_STRAVA_YEAR = 2009;
+
+/** Every year Strava could have data for (Strava launched in 2009). */
+function stravaYears(): number[] {
+  return Array.from({ length: new Date().getUTCFullYear() + 1 - FIRST_STRAVA_YEAR + 1 }, (_, i) => FIRST_STRAVA_YEAR + i);
+}
+
+/** All cached past-year calendars and route buckets of an athlete. */
+function pastYearKeys(athleteId: number): string[] {
+  return stravaYears().flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]);
+}
+
+/**
+ * Drops cached past years so they're rebuilt on next view. Called when Strava
+ * reports an activity hidden or deleted: finished years are otherwise cached
+ * forever, and we don't know which year the activity was in.
+ */
+export async function forgetPastYears(athleteId: number): Promise<void> {
+  await store().del(...pastYearKeys(athleteId));
+}
 
 /**
  * Removes every trace of an athlete: cards, tokens, settings, every slug they
@@ -245,7 +266,6 @@ const FIRST_STRAVA_YEAR = 2009;
 export async function deleteAthlete(athleteId: number, slugs: string[] = []): Promise<void> {
   const s = store();
   const [settings, meta] = await Promise.all([getSettings(athleteId), s.get<AthleteMeta>(k.meta(athleteId))]);
-  const years = Array.from({ length: new Date().getUTCFullYear() + 1 - FIRST_STRAVA_YEAR + 1 }, (_, i) => FIRST_STRAVA_YEAR + i);
   const keys = [
     k.card(athleteId),
     k.legacyCardView(athleteId, "link"),
@@ -255,7 +275,7 @@ export async function deleteAthlete(athleteId: number, slugs: string[] = []): Pr
     k.settings(athleteId),
     k.slug(String(athleteId)),
     k.cooldown(athleteId),
-    ...years.flatMap((y) => [k.calendar(athleteId, y), k.routes(athleteId, y)]),
+    ...pastYearKeys(athleteId),
     k.routes(athleteId, "recent"),
     k.webhookScout(athleteId),
     k.image(athleteId, "card"),

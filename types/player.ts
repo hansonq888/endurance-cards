@@ -197,7 +197,8 @@ export interface CardEnvelope {
 }
 
 /** Who can see a card: anyone with the secret link, or only the athlete. */
-export type Visibility = "unlisted" | "private";
+export const VISIBILITIES = ["unlisted", "private"] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
 
 /** Per-athlete privacy settings, stored apart from the (rebuilt-daily) card. */
 export interface CardSettings {

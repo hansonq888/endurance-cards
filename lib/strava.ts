@@ -9,6 +9,7 @@ import type {
   StravaSummaryActivity,
   StravaTokenResponse,
 } from "@/types/strava";
+import { DAY_MS } from "./format";
 
 const API_BASE = "https://www.strava.com/api/v3";
 const OAUTH_BASE = "https://www.strava.com/oauth";
@@ -100,7 +101,7 @@ function sameShortWindow(a: number, b: number): boolean {
 }
 
 function sameUtcDay(a: number, b: number): boolean {
-  return Math.floor(a / 86_400_000) === Math.floor(b / 86_400_000);
+  return Math.floor(a / DAY_MS) === Math.floor(b / DAY_MS);
 }
 
 /**

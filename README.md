@@ -17,7 +17,7 @@ No Strava app yet? `GET /api/dev/seed` (development only) loads six synthetic at
 | Script | |
 | --- | --- |
 | `npm run dev` / `build` / `start` | Next.js |
-| `npm test` | Engine unit tests (Vitest) |
+| `npm test` | Unit tests (Vitest): engine, tiers, privacy rules, access, trophies |
 | `npm run typecheck` / `lint` | Types / ESLint |
 
 ## Routes
@@ -27,9 +27,9 @@ No Strava app yet? `GET /api/dev/seed` (development only) loads six synthetic at
 | `GET /api/auth/strava` | Starts OAuth; the same route is the callback (state cookie CSRF check, scope check) |
 | `POST /api/auth/logout` | Clears the session cookie |
 | `GET /[username]` | Profile: card, scout report, sport mix, races, trophies, calendar, embed snippets. Opened by the owner, or by anyone via the secret `/link-…` URL |
-| `GET /[username].png` | 600×840 card PNG (rewritten to `/api/scout/[username]/card`) |
+| `GET /[username].png` | 688×940 transparent card PNG (rewritten to `/api/scout/[username]/card`) |
 | `GET /api/scout/[username]` | Card JSON `{ card, stale, source }` |
-| `GET /api/scout/[username]/story` | 1080×1920 story PNG |
+| `GET /api/scout/[username]/story` | 1080×1920 story JPEG |
 | `GET /api/scout/[username]/calendar?year=` | One past year of daily training (fetched from Strava once, then cached) |
 | `GET /api/scout/[username]/routes?date=` | That day's route shapes (no coordinates) |
 | `PATCH /api/scout/[username]/settings` | Owner-only: visibility, section toggles, reset share link |
@@ -44,13 +44,20 @@ No Strava app yet? `GET /api/dev/seed` (development only) loads six synthetic at
 
 ```
 lib/strava.ts         OAuth, token refresh, API client, rate-limit budget tracking
-lib/engine.ts         Pure rating engine: extractInputs() → rateInputs() → buildCard() / buildSharedCard()
+lib/engine.ts         Pure rating engine (index of the modules below): extractInputs() → rateInputs() → buildCard()
+  lib/scales.ts       1–99 scaling primitives (logScale, ratioScale, …)
+  lib/sports.ts       Strava types → sport families, per-sport benchmarks, labels
+  lib/extract.ts      Raw Strava payloads → ScoutInputs, daily series, route shapes
+  lib/rating.ts       ScoutInputs → six stats, OVR, tier, archetype, trophies
+  lib/card-build.ts   Identity (slug, name, avatar), rating history, re-rating
 lib/sharing.ts        Pure privacy rule: which Strava activities go on a card (Everyone + Followers)
 lib/access.ts         resolveViewer(): the one visibility gate every doorway goes through
 lib/scout.ts          Orchestration: cache-first, stale-while-revalidate, scout lock + dirty flag, owner actions
 lib/calendar.ts       Past-year calendars and route shapes (shared activities only)
 lib/redis.ts          Upstash/KV store (in-memory in dev only): cards, slugs, encrypted tokens, settings, locks
 lib/card-face.tsx     One card face shared by the web card and the PNG renderer (next/og)
+lib/card-renderer.tsx Card PNG, story and link-preview images (next/og)
+lib/share-images.ts   Card/story images cached in Redis per card version
 components/           PlayerCard, scout report, calendar, settings panel, share bar, trophies
 ```
 
@@ -93,7 +100,8 @@ link at any time. Settings saved as "public" before that option was removed read
 
 Every doorway (page, PNG, story, JSON, calendar and routes APIs) goes through `resolveViewer` in
 `lib/access.ts`; anything not allowed is a plain 404.
-Owner and private responses are `Cache-Control: private, no-store`. Usernames that would shadow app
+Owner and private responses are `Cache-Control: private, no-store`, except versioned image URLs
+(`?v=`), which the owner's browser may keep for a day. Usernames that would shadow app
 routes (`guide`, `privacy`, `api`, …) fall back to the numeric id. What's stored and why is documented
 for users at `/privacy`.
 
@@ -121,7 +129,7 @@ All attributes are 1–99. Volumes use `logScale` (log1p between a floor and a c
 Data window: the last 365 days, annualised if a very high-volume athlete hits the 600-activity cap.
 
 **Sport-aware:** PAC and END are rated *per sport* against that sport's own benchmarks
-(`SPORT_BENCHMARKS` in `lib/engine.ts`), then blended by the share of time spent on each sport.
+(`SPORT_BENCHMARKS` in `lib/sports.ts`), then blended by the share of time spent on each sport.
 There are no cross-sport conversion ratios; a swimmer is compared with swimmers.
 
 | Attr | Inputs | Weight |
@@ -150,8 +158,9 @@ are re-scouted instead.
    `_TOKEN`, `STRAVA_WEBHOOK_VERIFY_TOKEN`, and after step 4 `STRAVA_WEBHOOK_SUBSCRIPTION_ID`.
 3. **Strava API settings:** set the Authorization Callback Domain to your production host.
 4. **Webhook:** create the subscription (above), set its id, redeploy.
-5. **Brand:** swap the styled button for Strava's official **"Connect with Strava"** asset and add the
-   **"Powered by Strava"** logo ([brand guidelines](https://developers.strava.com/guidelines/)).
+
+Strava's official **"Connect with Strava"** button and **"Powered by Strava"** logo live unmodified in
+`public/strava` ([brand guidelines](https://developers.strava.com/guidelines/)).
 
 Preview deployments can't sign in: Strava only redirects to the one callback domain, and the OAuth
 state cookie lives on the preview host. Test sign-in on production (or locally).

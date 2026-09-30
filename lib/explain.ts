@@ -2,8 +2,10 @@
  * Plain-English explanations of a card's stats for the scout report. Pure and
  * presentation-only: the engine's `detail` strings stay as the terse API form.
  */
-import { MIN_PR_HOURS, PR_SPORTS_TEXT, prTotals } from "./engine";
-import type { AttributeKey, PlayerCard, SportBreakdown, SportFamily } from "@/types/player";
+import { MIN_PR_HOURS, PR_SPORTS_TEXT, prTotals } from "./rating";
+import { SPORT_LABELS, countedSports } from "./sports";
+import type { AttributeKey, PlayerCard, SportBreakdown } from "@/types/player";
+import { mmss, n0 } from "./format";
 
 export interface StatExplanation {
   /** What the stat measures, in one line. */
@@ -29,7 +31,7 @@ export function ratingWord(value: number): string {
 }
 
 /** One-line "what this measures" per stat — shared by the scout report and the guide. */
-export const STAT_MEASURES: Record<AttributeKey, string> = {
+const STAT_MEASURES: Record<AttributeKey, string> = {
   PAC: "Your typical fast pace in each sport",
   END: "How long you can go, and how much you train",
   PRS: "How often you beat your own best",
@@ -38,31 +40,11 @@ export const STAT_MEASURES: Record<AttributeKey, string> = {
   PHY: "Your training history over the years",
 };
 
-const SPORT: Record<SportFamily, string> = {
-  run: "Run",
-  ride: "Ride",
-  swim: "Swim",
-  foot: "Hike",
-  snow: "Snow",
-  water: "Paddle",
-  gym: "Gym",
-  other: "Other",
-};
-
-const n0 = (n: number) => Math.round(n).toLocaleString("en-US");
-const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
-
 function pace(s: SportBreakdown): string | null {
   if (!s.paceMps) return null;
-  if (s.family === "swim") return `${SPORT.swim} ${mmss(100 / s.paceMps)} /100m`;
-  if (s.family === "ride") return `${SPORT.ride} ${(s.paceMps * 3.6).toFixed(1)} km/h`;
-  return `${SPORT[s.family]} ${mmss(1000 / s.paceMps)} /km`;
-}
-
-/** Sports that matter for the athlete (≥2 sessions or ≥3 h), most time first. */
-function mainSports(card: PlayerCard) {
-  const counted = card.inputs.sports.filter((s) => s.activities >= 2 || s.hours >= 3);
-  return counted.length ? counted : card.inputs.sports;
+  if (s.family === "swim") return `${SPORT_LABELS.swim} ${mmss(100 / s.paceMps)} /100m`;
+  if (s.family === "ride") return `${SPORT_LABELS.ride} ${(s.paceMps * 3.6).toFixed(1)} km/h`;
+  return `${SPORT_LABELS[s.family]} ${mmss(1000 / s.paceMps)} /km`;
 }
 
 export function explainStat(card: PlayerCard, key: AttributeKey): StatExplanation {
@@ -74,7 +56,7 @@ export function explainStat(card: PlayerCard, key: AttributeKey): StatExplanatio
 
 function explainParts(card: PlayerCard, key: AttributeKey): Omit<StatExplanation, "headline"> {
   const i = card.inputs;
-  const sports = mainSports(card);
+  const sports = countedSports(card.inputs.sports);
   switch (key) {
     case "PAC": {
       const facts = sports.map(pace).filter((f): f is string => f !== null).slice(0, 3);
@@ -86,8 +68,8 @@ function explainParts(card: PlayerCard, key: AttributeKey): Omit<StatExplanation
     case "END": {
       const longest = sports.slice(0, 2).map((s) =>
         s.family === "gym" || s.family === "other"
-          ? `Longest ${SPORT[s.family].toLowerCase()} session ${s.longestHours.toFixed(1)} h`
-          : `Longest ${SPORT[s.family].toLowerCase()} ${s.longestKm} km`,
+          ? `Longest ${SPORT_LABELS[s.family].toLowerCase()} session ${s.longestHours.toFixed(1)} h`
+          : `Longest ${SPORT_LABELS[s.family].toLowerCase()} ${s.longestKm} km`,
       );
       return { measures: STAT_MEASURES.END, facts: [...longest, `${n0(i.windowHours)} h this year`] };
     }
@@ -114,7 +96,7 @@ function explainParts(card: PlayerCard, key: AttributeKey): Omit<StatExplanation
           `${sports.length} ${sports.length === 1 ? "sport" : "sports"}`,
           sports
             .slice(0, 3)
-            .map((s) => `${SPORT[s.family]} ${Math.round((s.hours / total) * 100)}%`)
+            .map((s) => `${SPORT_LABELS[s.family]} ${Math.round((s.hours / total) * 100)}%`)
             .join(" / "),
           ...(i.hasTriathlonMix ? ["Triathlon bonus"] : []),
         ],

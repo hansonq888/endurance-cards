@@ -7,13 +7,11 @@ import { SectionHeading } from "./SectionHeading";
 import { STAT_ICONS } from "./StatIcons";
 import { SportDonut } from "./SportDonut";
 import { TrophyBadges, type BadgeItem } from "./TrophyBadges";
-
-/** Panel container shared by the sections around the card. */
-export const PANEL = "grain rounded-2xl border border-line p-5";
+import { PANEL } from "./ui";
 
 
 /** Map-style scale bar: orange fill with tick marks every 25. */
-export function ScaleBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
+function ScaleBar({ value, className = "h-1.5" }: { value: number; className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-full bg-white/[0.07] ${className}`}>
       <div

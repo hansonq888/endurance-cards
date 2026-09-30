@@ -4,9 +4,11 @@
  * is genuinely rare. Values are derived from cached ScoutInputs, so progress
  * can be shown without touching Strava.
  *
- * Pure module (no engine import) so the engine, UI and guide can all use it.
+ * Pure module (only the sports table from the engine) so the engine, UI and guide can all use it.
  */
 import type { ScoutInputs, Trophy, TrophyLevel } from "../types/player";
+import { n0 } from "./format";
+import { isCountedSport } from "./sports";
 
 export interface TrophyDef {
   id: string;
@@ -23,7 +25,6 @@ export interface TrophyDef {
   format?: (n: number) => string;
 }
 
-const n0 = (n: number) => Math.round(n).toLocaleString("en-US");
 
 /** Longest run of consecutive active days in the window. */
 function longestDayStreak(minutes: number[]): number {
@@ -50,7 +51,7 @@ function longestWeekStreak(minutes: number[]): number {
 }
 
 const sessions = (i: ScoutInputs, family: string) => i.sports.find((s) => s.family === family)?.activities ?? 0;
-const countedSports = (i: ScoutInputs) => i.sports.filter((s) => s.activities >= 2 || s.hours >= 3).length;
+const sportCount = (i: ScoutInputs) => i.sports.filter(isCountedSport).length;
 
 export const TROPHIES: TrophyDef[] = [
   {
@@ -136,7 +137,7 @@ export const TROPHIES: TrophyDef[] = [
     measure: "Different sports",
     unit: "sports",
     levels: [3, 4, 5],
-    value: countedSports,
+    value: sportCount,
   },
   {
     id: "dawn-patrol",

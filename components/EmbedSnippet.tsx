@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { useState } from "react";
 import { SectionHeading } from "./SectionHeading";
+import { PANEL } from "./ui";
 
 export function EmbedSnippet({ pageUrl, imageUrl, name }: { pageUrl: string; imageUrl: string; name: string }) {
   const snippets = [
@@ -24,7 +25,7 @@ export function EmbedSnippet({ pageUrl, imageUrl, name }: { pageUrl: string; ima
   }
 
   return (
-    <section className="grain rounded-2xl border border-line p-5">
+    <section className={PANEL}>
       <SectionHeading>Embed your card</SectionHeading>
       <div className="space-y-3">
         {snippets.map(({ label, value }) => (

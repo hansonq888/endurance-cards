@@ -96,28 +96,9 @@ body::after {
 }
 
 /*
- * Holographic foil, tinted per tier via --holo-1..4 (see holoVars()). An
- * iridescent rotating edge, plus a sheen that follows the pointer via
- * --mx / --my. Motion stops under prefers-reduced-motion.
+ * Holographic foil, tinted per tier via --holo-1..4 (see holoVars()): a sheen
+ * that follows the pointer via --mx / --my. Motion stops under prefers-reduced-motion.
  */
-@property --holo-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-.holo-edge {
-  --holo-angle: 0deg;
-  padding: 1.5px;
-  background: conic-gradient(
-    from var(--holo-angle),
-    var(--holo-1, #fc4c02),
-    var(--holo-2, #ffb238),
-    var(--holo-3, #ff7a59),
-    var(--holo-4, #ffe29a),
-    var(--holo-1, #fc4c02)
-  );
-  animation: holo-spin 8s linear infinite;
-}
 .holo-foil {
   background: linear-gradient(
     115deg,
@@ -133,15 +114,7 @@ body::after {
   mix-blend-mode: color-dodge;
   transition: background-position 120ms ease-out;
 }
-@keyframes holo-spin {
-  to {
-    --holo-angle: 360deg;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .holo-edge {
-    animation: none;
-  }
   .holo-foil {
     transition: none;
   }

@@ -22,16 +22,7 @@ export const SPORT_COLORS: Record<SportFamily, string> = {
 /** Fixed segment order (also the validated adjacency order). */
 export const SPORT_ORDER: SportFamily[] = ["run", "ride", "swim", "snow", "foot", "water", "gym", "other"];
 
-export const SPORT_LABELS: Record<SportFamily, string> = {
-  run: "Run",
-  ride: "Ride",
-  swim: "Swim",
-  snow: "Snow",
-  foot: "Hike",
-  water: "Paddle",
-  gym: "Gym",
-  other: "Other",
-};
+export { SPORT_LABELS } from "./sports";
 
 /**
  * Heatmap: one hue, monotone steps. On the dark surface the anchor flips, so
