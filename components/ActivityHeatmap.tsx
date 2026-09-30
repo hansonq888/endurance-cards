@@ -374,7 +374,7 @@ export function ActivityHeatmap({
                           y={y}
                           width={CELL}
                           height={CELL}
-                          rx={CELL / 2}
+                          rx={3.5}
                           fill={heatStep(d.minutes).color}
                           stroke={picked === d ? "var(--strava)" : active ? "var(--foreground)" : "none"}
                           strokeWidth={picked === d ? 2 : 1.5}
@@ -454,7 +454,7 @@ export function ActivityHeatmap({
                 <span className="flex items-center gap-1.5">
                   <span>Less</span>
                   {HEAT_STEPS.map((s) => (
-                    <span key={s.label} title={s.label} className="h-3 w-3 rounded-full" style={{ background: s.color }} />
+                    <span key={s.label} title={s.label} className="h-3 w-3 rounded-[4px]" style={{ background: s.color }} />
                   ))}
                   <span>More</span>
                 </span>
