@@ -288,11 +288,11 @@ export function ActivityHeatmap({
         </aside>
 
         <div className="min-w-0 flex-1">
-          <dl className="mb-6 flex flex-wrap gap-x-10 gap-y-4 text-xs">
+          <dl className="mb-6 grid grid-cols-2 gap-x-6 gap-y-4 text-xs sm:flex sm:flex-wrap sm:gap-x-10">
             {isRecent && (
               <div>
                 <dt className="text-[11px] uppercase tracking-wider text-muted">Form</dt>
-                <dd className="display mt-1 text-2xl leading-none tracking-tight">
+                <dd className="display mt-1 whitespace-nowrap text-base leading-none tracking-tight sm:text-2xl">
                   {stats.form}{" "}
                   {trend && (
                     <span className={stats.change! >= 0 ? "text-strava" : "text-muted"}>
@@ -319,7 +319,7 @@ export function ActivityHeatmap({
             ).map(([k, v]) => (
               <div key={k}>
                 <dt className="text-[11px] uppercase tracking-wider text-muted">{k}</dt>
-                <dd className="display mt-1 text-2xl leading-none tracking-tight">{v}</dd>
+                <dd className="display mt-1 whitespace-nowrap text-base leading-none tracking-tight sm:text-2xl">{v}</dd>
               </div>
             ))}
           </dl>
