@@ -254,8 +254,9 @@ export function ActivityHeatmap({
         </div>
       </div>
 
-      {/* Main column (stats, chart, day detail) with a controls sidebar on the right — above it on phones. */}
-      <div className="flex flex-col gap-5 lg:flex-row lg:gap-8">
+      {/* The title and view tabs sit open on the page; everything else lives in a panel like the other sections.
+          Main column (stats, chart, day detail) with a controls sidebar on the right — above it on phones. */}
+      <div className="grain flex flex-col gap-5 rounded-2xl border border-line p-5 lg:flex-row lg:gap-8">
         <aside className={`shrink-0 lg:order-last lg:w-36 ${years.length ? "" : "hidden"}`}>
           {years.length > 0 && (
             // Years as a list: a sideways swipe row on phones, a vertical scroller beside the chart on desktop.
