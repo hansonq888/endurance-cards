@@ -1,5 +1,5 @@
 /** Core domain types for Kudex player cards. */
-import type { PrivacyMix } from "@/lib/audience";
+import type { PrivacyMix } from "@/lib/sharing";
 
 export const ATTRIBUTE_KEYS = ["PAC", "END", "PRS", "CONS", "VAR", "PHY"] as const;
 export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
@@ -103,17 +103,16 @@ export interface YearCalendar {
   prs: number[];
   races: RaceResult[];
   /**
-   * The same year for each visitor audience (only activities they may see). The
-   * top-level series is the owner's. Missing on years cached before audiences
-   * existed: visitors then get the year rebuilt rather than the owner's version.
+   * True when built from shared activities only (lib/sharing.ts). Years cached
+   * before that rule may include Only You activities and are rebuilt instead.
    */
-  audiences?: Record<"link" | "public", { minutes: number[]; prs: number[]; races: RaceResult[] }>;
+  shared?: boolean;
   /** ISO timestamp of the fetch. */
   fetchedAt: string;
 }
 
 /** Bump when the ScoutInputs shape changes; cached cards with another schema are re-scouted. */
-export const INPUTS_SCHEMA = 10;
+export const INPUTS_SCHEMA = 11;
 
 /**
  * Aggregated facts extracted from raw Strava payloads. The engine turns these
@@ -186,9 +185,7 @@ export interface PlayerCard {
   /** ISO timestamp of the last successful scout. */
   scoutedAt: string;
   engineVersion: number;
-  /** Which audience this card was built for (lib/audience.ts). The owner card holds every activity. */
-  audience?: "owner" | "link" | "public";
-  /** Owner card only: how the athlete's training splits across Strava visibility levels. */
+  /** How the athlete's training splits across Strava visibility levels (shown only to them). */
   privacy?: PrivacyMix;
 }
 
@@ -199,8 +196,8 @@ export interface CardEnvelope {
   source: "cache" | "fresh";
 }
 
-/** Who can see a card. */
-export type Visibility = "public" | "unlisted" | "private";
+/** Who can see a card: anyone with the secret link, or only the athlete. */
+export type Visibility = "unlisted" | "private";
 
 /** Per-athlete privacy settings, stored apart from the (rebuilt-daily) card. */
 export interface CardSettings {
@@ -211,6 +208,6 @@ export interface CardSettings {
   showCalendar: boolean;
   /** Let visitors open a day's route shape from the calendar. */
   showRoutes: boolean;
-  /** True while `visibility` is still the one we picked from their Strava privacy (cleared once they choose). */
-  autoVisibility?: boolean;
+  /** Development seed only: demo cards anyone can open at their username. */
+  demo?: boolean;
 }

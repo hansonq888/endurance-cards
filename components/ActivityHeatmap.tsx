@@ -70,11 +70,8 @@ export function ActivityHeatmap({
   years,
   recent,
   routesEnabled = true,
-  view: previewView,
 }: {
   slug: string;
-  /** Owner previewing a visitor's version: fetch years and routes as that audience would see them. */
-  view?: "link" | "public";
   /** False when the owner hides routes from visitors: days aren't clickable. */
   routesEnabled?: boolean;
   /** Past calendar years that can be loaded, newest first. */
@@ -97,7 +94,7 @@ export function ActivityHeatmap({
     setStatus({ loading: true, error: null });
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
-        const res = await fetch(`/api/scout/${encodeURIComponent(slug)}/calendar?year=${next}${previewView ? `&view=${previewView}` : ""}`);
+        const res = await fetch(`/api/scout/${encodeURIComponent(slug)}/calendar?year=${next}`);
         if (res.status === 409) {
           // Someone else is loading this year right now — wait for their result.
           await new Promise((r) => setTimeout(r, 1500));
@@ -462,7 +459,7 @@ export function ActivityHeatmap({
               )}
             </div>
           </div>
-          {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} day={picked} view={previewView} onClose={() => setPicked(null)} />}
+          {view === "grid" && picked && <DayRoutes key={picked.key} slug={slug} day={picked} onClose={() => setPicked(null)} />}
         </div>
       </div>
     </div>

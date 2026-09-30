@@ -1,8 +1,8 @@
 import "server-only";
 import { after } from "next/server";
 import { defaultSettings, requireOwner, resolveViewer, type Viewer } from "./access";
-import { defaultVisibilityFor, type VisitorAudience } from "./audience";
-import { buildAudienceCards, ENGINE_VERSION, rerateCard, routesByDay, WINDOW_DAYS } from "./engine";
+import { sharedActivities } from "./sharing";
+import { buildSharedCard, ENGINE_VERSION, rerateCard, routesByDay, WINDOW_DAYS } from "./engine";
 import { CooldownError, NotFoundError, StravaAuthError } from "./errors";
 import {
   acquireScoutLock,
@@ -11,15 +11,12 @@ import {
   deleteAthlete,
   deleteTokens,
   getCachedCard,
-  getCardView,
   getSettings,
   getTokens,
   isDirty,
   isFresh,
   releaseScoutLock,
   saveCard,
-  saveCardView,
-  saveCardViews,
   saveRoutes,
   saveSettings,
 } from "./redis";
@@ -35,7 +32,7 @@ import {
 import type { CardEnvelope, PlayerCard } from "@/types/player";
 
 /**
- * Hits Strava and rebuilds an athlete's cards (one per audience, lib/audience.ts).
+ * Hits Strava and rebuilds an athlete's card (shared activities only, lib/sharing.ts).
  * The only function in the app that spends Strava API quota for card data.
  */
 export async function scoutAthlete(athleteId: number): Promise<PlayerCard> {
@@ -87,22 +84,12 @@ async function scoutOnce(athleteId: number): Promise<PlayerCard> {
     fetchActivities(tokens.accessToken, since),
   ]);
 
-  const [previous, previousLink, previousPublic] = await Promise.all([
-    getCachedCard(athleteId),
-    getCardView(athleteId, "link"),
-    getCardView(athleteId, "public"),
-  ]);
-  const cards = buildAudienceCards(
-    { athlete, stats, activities, truncated },
-    { owner: previous ?? undefined, link: previousLink ?? undefined, public: previousPublic ?? undefined },
-  );
+  const previous = await getCachedCard(athleteId);
+  const card = buildSharedCard({ athlete, stats, activities, truncated }, previous);
   // Removed (or revoked) while we were fetching? Don't resurrect the card.
   if (!(await getTokens(athleteId))) throw new StravaAuthError();
-  // Brand-new card: start from how they share on Strava. Written before the card, so no
-  // request can slip in between and lock in the generic default. Existing choices are never touched.
-  if (!(await getSettings(athleteId))) {
-    await saveSettings(athleteId, defaultSettings(defaultVisibilityFor(cards.owner.privacy!), true));
-  }
+  // Brand-new card: shareable by link. Written before the card, so every doorway sees settings.
+  if (!(await getSettings(athleteId))) await saveSettings(athleteId, defaultSettings());
   if (process.env.NODE_ENV !== "production") {
     // Raw Strava values too, so a missing `visibility` field (treated as Followers) is easy to spot.
     const raw: Record<string, number> = {};
@@ -110,11 +97,12 @@ async function scoutOnce(athleteId: number): Promise<PlayerCard> {
       const key = `${a.visibility ?? "missing"}${a.private ? "+private" : ""}`;
       raw[key] = (raw[key] ?? 0) + 1;
     }
-    console.info(`[kudex] visibility mix for ${athleteId} (everyone/followers/only me):`, cards.owner.privacy?.activities.join("/"), "raw:", raw);
+    console.info(`[kudex] visibility mix for ${athleteId} (everyone/followers/only me):`, card.privacy?.activities.join("/"), "raw:", raw);
   }
-  await saveCardViews(cards, previous?.slug);
-  await saveRoutes(athleteId, "recent", routesByDay(activities));
-  return cards.owner;
+  await saveCard(card, previous?.slug);
+  // Only You activities never reach storage, route shapes included.
+  await saveRoutes(athleteId, "recent", routesByDay(sharedActivities(activities)));
+  return card;
 }
 
 /** A card plus what the current viewer is allowed to see of it. */
@@ -130,50 +118,34 @@ function current(card: PlayerCard | null): PlayerCard | null {
 
 /**
  * Cache-first card lookup used by the profile page, JSON API and image embeds,
- * gated by the card's visibility (lib/access.ts) and returning the version
- * built for the viewer's audience (lib/audience.ts). Stale cards are served
- * immediately and refreshed in the background (stale-while-revalidate), so
- * embeds never block on Strava.
- *
- * A visitor never falls back to the owner's card: if their version is missing
- * (cached before audiences existed), it's rebuilt first, or they get "not found".
+ * gated by the card's visibility (lib/access.ts). Everyone who may open the
+ * card gets the same one. Stale cards are served immediately and refreshed in
+ * the background (stale-while-revalidate), so embeds never block on Strava.
  */
-export async function getCardBySlug(
-  slug: string,
-  sessionAthleteId: number | null,
-  opts: { preview?: VisitorAudience } = {},
-): Promise<ViewedCard> {
-  const viewer = await resolveViewer(slug, sessionAthleteId, opts);
-  const { athleteId, audience } = viewer;
+export async function getCardBySlug(slug: string, sessionAthleteId: number | null): Promise<ViewedCard> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
+  const { athleteId } = viewer;
 
   const cached = await getCachedCard(athleteId);
-  let owner = current(cached);
-  if (owner && owner !== cached) await saveCard(owner);
-  let card = audience === "owner" ? owner : await loadView(athleteId, audience);
+  let card = current(cached);
+  if (card && card !== cached) await saveCard(card);
 
-  if (!owner || !card) {
+  if (!card) {
     // Missing or unusable card, but we may still hold tokens — rebuild synchronously.
     try {
-      owner = await scoutAthlete(athleteId);
-      card = audience === "owner" ? owner : await getCardView(athleteId, audience);
+      card = await scoutAthlete(athleteId);
     } catch (err) {
       if (err instanceof StravaAuthError) throw new NotFoundError(`No scouted player named "${slug}"`);
       throw err;
     }
-    if (!card) throw new NotFoundError(`No scouted player named "${slug}"`);
-    return { card, stale: false, source: "fresh", viewer: withPublicSlug(viewer, owner) };
-  }
-
-  // Visitors whose audience can't see a single activity get "not found" rather than an empty card.
-  if (audience !== "owner" && !viewer.previewing && card.inputs.activityCount === 0) {
-    throw new NotFoundError(`No scouted player named "${slug}"`);
+    return { card, stale: false, source: "fresh", viewer };
   }
 
   // Strava told us an activity changed (possibly its visibility): until the rebuild lands,
   // keep this response out of shared caches so a just-hidden activity isn't pinned on a CDN.
   const dirty = await isDirty(athleteId);
-  const envelope = { card, viewer: withPublicSlug(dirty ? { ...viewer, publiclyCacheable: false } : viewer, owner) };
-  if (isFresh(owner) && !dirty) return { ...envelope, stale: false, source: "cache" };
+  const envelope = { card, viewer: dirty ? { ...viewer, publiclyCacheable: false } : viewer };
+  if (isFresh(card) && !dirty) return { ...envelope, stale: false, source: "cache" };
 
   after(async () => {
     try {
@@ -183,18 +155,6 @@ export async function getCardBySlug(
     }
   });
   return { ...envelope, stale: true, source: "cache" };
-}
-
-async function loadView(athleteId: number, audience: VisitorAudience): Promise<PlayerCard | null> {
-  const cached = await getCardView(athleteId, audience);
-  const card = current(cached);
-  if (card && card !== cached) await saveCardView(card, audience);
-  return card;
-}
-
-/** Public cards share their username URL even when opened via the secret link. */
-function withPublicSlug(viewer: Viewer, card: PlayerCard): Viewer {
-  return viewer.settings.visibility === "public" ? { ...viewer, shareSlug: card.slug } : viewer;
 }
 
 /** Owner-triggered "Re-scout" — bypasses freshness but is rate limited per athlete. */

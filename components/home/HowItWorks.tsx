@@ -29,7 +29,7 @@ export function HowItWorks() {
         </div>
       </Step>
       <Step n={3} title="Share it" delay={160}>
-        <p>A card image, a story for Instagram, a link or a README embed. Visitors only see what Strava already shows them.</p>
+        <p>A card image, a story for Instagram, a link or a README embed. Only people with your link can open it.</p>
         <div className="mt-4 flex gap-3 text-foreground" aria-hidden>
           <Smartphone className="h-4 w-4" />
           <Link2 className="h-4 w-4" />

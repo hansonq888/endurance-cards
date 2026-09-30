@@ -1,5 +1,5 @@
 import { Settings2 } from "lucide-react";
-import type { PrivacyMix } from "@/lib/audience";
+import type { PrivacyMix } from "@/lib/sharing";
 import type { CardSettings } from "@/types/player";
 import { visibilityOption } from "./visibilityOptions";
 import { OwnerActions } from "./OwnerActions";
@@ -7,7 +7,7 @@ import { VisibilitySettings } from "./VisibilitySettings";
 
 /**
  * Owner-only settings, folded into one row under the card: shows who can see
- * the card, and opens to visibility, the share link, what visitors see and
+ * the card, and opens to visibility, the share link, section toggles and
  * account actions. Collapsed by default so the card stays the focus.
  */
 export function CardSettingsPanel({
@@ -15,15 +15,12 @@ export function CardSettingsPanel({
   settings,
   origin,
   privacy,
-  pagePath,
 }: {
   slug: string;
   settings: CardSettings;
   origin: string;
-  /** The owner card's Strava visibility mix; absent on cards scouted before audiences existed. */
+  /** The athlete's Strava visibility mix, for the Only You note. */
   privacy?: PrivacyMix;
-  /** This page's path, for the "preview" link. */
-  pagePath: string;
 }) {
   const { label, icon: Icon } = visibilityOption(settings.visibility);
   return (
@@ -40,7 +37,7 @@ export function CardSettingsPanel({
         </span>
       </summary>
       <div className="space-y-3 border-t border-line px-3.5 pb-3.5 pt-3">
-        <VisibilitySettings slug={slug} settings={settings} origin={origin} privacy={privacy} pagePath={pagePath} />
+        <VisibilitySettings slug={slug} settings={settings} origin={origin} privacy={privacy} />
         <div className="border-t border-line pt-3">
           <OwnerActions slug={slug} />
         </div>

@@ -26,16 +26,15 @@ No Strava app yet? `GET /api/dev/seed` (development only) loads six synthetic at
 | --- | --- |
 | `GET /api/auth/strava` | Starts OAuth; the same route is the callback (state cookie CSRF check, scope check) |
 | `POST /api/auth/logout` | Clears the session cookie |
-| `GET /[username]` | Profile: card, scout report, sport mix, races, trophies, calendar, embed snippets. Owner may add `?view=public\|link` to preview a visitor's version |
+| `GET /[username]` | Profile: card, scout report, sport mix, races, trophies, calendar, embed snippets. Opened by the owner, or by anyone via the secret `/link-…` URL |
 | `GET /[username].png` | 600×840 card PNG (rewritten to `/api/scout/[username]/card`) |
-| `GET /api/scout/[username]` | Card JSON `{ card, stale, source }` for the viewer's audience |
+| `GET /api/scout/[username]` | Card JSON `{ card, stale, source }` |
 | `GET /api/scout/[username]/story` | 1080×1920 story PNG |
 | `GET /api/scout/[username]/calendar?year=` | One past year of daily training (fetched from Strava once, then cached) |
 | `GET /api/scout/[username]/routes?date=` | That day's route shapes (no coordinates) |
 | `PATCH /api/scout/[username]/settings` | Owner-only: visibility, section toggles, reset share link |
 | `POST /api/scout/[username]` | Owner-only re-scout, 10-minute cooldown |
 | `DELETE /api/scout/[username]` | Owner-only: revokes Strava access and deletes all stored data |
-| `GET /api/find?q=` | Look up a **public** card by username or Strava profile URL |
 | `GET/POST /api/strava/webhook` | Strava webhook (see below) |
 | `GET /api/dev/seed`, `/api/dev/login` | Development only (404 in production) |
 
@@ -45,11 +44,11 @@ No Strava app yet? `GET /api/dev/seed` (development only) loads six synthetic at
 
 ```
 lib/strava.ts         OAuth, token refresh, API client, rate-limit budget tracking
-lib/engine.ts         Pure rating engine: extractInputs() → rateInputs() → buildCard() / buildAudienceCards()
-lib/audience.ts       Pure privacy rules: which Strava activities each kind of viewer may see
+lib/engine.ts         Pure rating engine: extractInputs() → rateInputs() → buildCard() / buildSharedCard()
+lib/sharing.ts        Pure privacy rule: which Strava activities go on a card (Everyone + Followers)
 lib/access.ts         resolveViewer(): the one visibility gate every doorway goes through
 lib/scout.ts          Orchestration: cache-first, stale-while-revalidate, scout lock + dirty flag, owner actions
-lib/calendar.ts       Past-year calendars and route shapes, per audience
+lib/calendar.ts       Past-year calendars and route shapes (shared activities only)
 lib/redis.ts          Upstash/KV store (in-memory in dev only): cards, slugs, encrypted tokens, settings, locks
 lib/card-face.tsx     One card face shared by the web card and the PNG renderer (next/og)
 components/           PlayerCard, scout report, calendar, settings panel, share bar, trophies
@@ -67,7 +66,7 @@ One scout costs at most 5 requests (`/athlete`, `/athletes/{id}/stats`, up to 3 
   (429 + `Retry-After`) when the 15-minute or daily budget is nearly spent, with a reserve kept for new sign-ups.
 - A per-athlete lock prevents duplicate concurrent scouts. Manual re-scouts have a cooldown; webhook
   re-scouts are debounced to one per athlete per 2 minutes.
-- Public image and JSON responses send short `s-maxage` / `stale-while-revalidate` headers so CDNs absorb embed traffic.
+- Shareable image and JSON responses send short `s-maxage` / `stale-while-revalidate` headers so CDNs absorb embed traffic.
 
 ## The card
 
@@ -79,23 +78,21 @@ sport: km run / swum / paddled, km climbed (cycling, hiking, skiing) or hours tr
 
 ## Privacy & visibility
 
-**Visitors only see what they could already see on Strava.** Each Strava activity is Everyone,
-Followers or Only You, and each audience gets its own card built only from what it may see
-(`lib/audience.ts`, `buildAudienceCards`): rating, stats, trophies, races, calendar, routes and trend.
+**One card per athlete, and everyone who can open it sees the same card.** It's built from the
+activities the athlete shares on Strava with Everyone or Followers (`lib/sharing.ts`,
+`buildSharedCard`); Only You activities are never on it and their route shapes are never stored.
+A Kudex link works like adding a follower, so there's no public listing or search.
 
-| Card visibility | Who can view | Built from |
-| --- | --- | --- |
-| **Public** | Anyone, at `/username` (and via `/api/find`) | Everyone activities |
-| **Link only** | The owner, and anyone with the secret `/link-…` URL. `/username` returns 404 | Everyone + Followers |
-| **Private** | The signed-in owner only | — |
+| Card visibility | Who can view |
+| --- | --- |
+| **Link only** (default) | The owner, and anyone with the secret `/link-…` URL. `/username` returns 404 |
+| **Private** | The signed-in owner only |
 
-The owner always sees every activity. New cards start from the athlete's Strava habits: Public if
-≥75% of their training time is Everyone, Link only if ≥75% is visible to followers, else Private. An
-explicit choice is never overwritten. Owners can also hide the calendar/races and route shapes, and
-preview exactly what visitors see from the settings panel.
+Owners can also hide the calendar/races and route shapes from people they share with, and reset the
+link at any time. Settings saved as "public" before that option was removed read as Link only.
 
 Every doorway (page, PNG, story, JSON, calendar and routes APIs) goes through `resolveViewer` in
-`lib/access.ts`; anything not allowed is a plain 404, and visitors never fall back to the owner's card.
+`lib/access.ts`; anything not allowed is a plain 404.
 Owner and private responses are `Cache-Control: private, no-store`. Usernames that would shadow app
 routes (`guide`, `privacy`, `api`, …) fall back to the numeric id. What's stored and why is documented
 for users at `/privacy`.

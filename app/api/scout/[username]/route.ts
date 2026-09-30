@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { errorResponse } from "@/lib/errors";
-import { cacheControlFor, parsePreview, redactForViewer } from "@/lib/access";
+import { cacheControlFor, redactForViewer } from "@/lib/access";
 import { getCardBySlug, removeBySlug, rescoutBySlug } from "@/lib/scout";
 import { clearSession, getSessionAthleteId } from "@/lib/session";
 
@@ -12,9 +12,7 @@ import { clearSession, getSessionAthleteId } from "@/lib/session";
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/scout/[username]">) {
   const { username } = await ctx.params;
   try {
-    const { viewer, ...envelope } = await getCardBySlug(username, await getSessionAthleteId(), {
-      preview: parsePreview(req.nextUrl.searchParams.get("view")),
-    });
+    const { viewer, ...envelope } = await getCardBySlug(username, await getSessionAthleteId());
     return Response.json(redactForViewer(envelope, viewer), { headers: { "Cache-Control": cacheControlFor(viewer) } });
   } catch (err) {
     return errorResponse(err);

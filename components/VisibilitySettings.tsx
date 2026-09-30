@@ -1,32 +1,27 @@
 "use client";
 
 import { Check, Copy, RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { visitorAudience, type PrivacyMix } from "@/lib/audience";
+import type { PrivacyMix } from "@/lib/sharing";
 import type { CardSettings } from "@/types/player";
 import { visibilityOption, VISIBILITY_OPTIONS } from "./visibilityOptions";
 
 /**
  * Owner-only (inside CardSettingsPanel): who can see the card, the secret link,
- * how much of their training visitors get (with a preview), and which sections
- * visitors see.
+ * which sections visitors see, and a note about Only You activities.
  */
 export function VisibilitySettings({
   slug,
   settings: initial,
   origin,
   privacy,
-  pagePath,
 }: {
   slug: string;
   settings: CardSettings;
   origin: string;
-  /** The owner card's Strava visibility mix; absent on cards scouted before audiences existed. */
+  /** The athlete's Strava visibility mix, for the Only You note. */
   privacy?: PrivacyMix;
-  /** This page's path, for the preview link. */
-  pagePath: string;
 }) {
   const router = useRouter();
   const [settings, setSettings] = useState(initial);
@@ -63,7 +58,7 @@ export function VisibilitySettings({
     }
   }
 
-  // Public cards are shared at the username (the Share bar has it); only link-only cards need their secret link here.
+  // The secret link is how a card is shared; private cards have none to show.
   const link = settings.visibility === "unlisted" ? `${origin}/${settings.shareToken}` : null;
 
   async function copy() {
@@ -78,14 +73,12 @@ export function VisibilitySettings({
   }
 
   const current = visibilityOption(settings.visibility);
-  const audience = visitorAudience(settings.visibility);
-  const [everyone, followers, onlyMe] = privacy?.activities ?? [0, 0, 0];
-  const seen = audience === "public" ? everyone : everyone + followers;
-  const total = everyone + followers + onlyMe;
+  const onlyMe = privacy?.activities[2] ?? 0;
+  const shareable = settings.visibility === "unlisted";
 
   return (
     <div className="space-y-3 text-left font-accent">
-      <div role="radiogroup" aria-label="Who can see your card" className="grid grid-cols-3 gap-1 rounded-lg border border-line p-1">
+      <div role="radiogroup" aria-label="Who can see your card" className="grid grid-cols-2 gap-1 rounded-lg border border-line p-1">
         {VISIBILITY_OPTIONS.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
@@ -102,10 +95,7 @@ export function VisibilitySettings({
           </button>
         ))}
       </div>
-      <p className="text-[11px] leading-relaxed text-muted">
-        {current.help}
-        {settings.autoVisibility && <> Picked to match your Strava privacy.</>}
-      </p>
+      <p className="text-[11px] leading-relaxed text-muted">{current.help}</p>
 
       {link && (
         <div className="flex items-stretch gap-1.5">
@@ -126,36 +116,24 @@ export function VisibilitySettings({
         </div>
       )}
 
-      {audience && (
-        <>
-          {/* What visitors get, in one line: only activities they could see on Strava (lib/audience.ts). */}
-          {privacy && (
-            <p className={`flex items-center justify-between gap-3 text-[11px] ${seen === 0 ? "text-red-300/90" : "text-muted"}`}>
-              <span>
-                {seen === 0 ? (
-                  "None of your activities are visible to them on Strava"
-                ) : (
-                  <>
-                    Visitors see <span className="text-foreground">{seen.toLocaleString("en-US")}</span> of {total.toLocaleString("en-US")} activities
-                  </>
-                )}
-              </span>
-              <Link href={`${pagePath}?view=${audience}`} className="shrink-0 uppercase tracking-wider text-foreground hover:text-strava">
-                Preview →
-              </Link>
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-muted">Show visitors</span>
-            <Switch label="Calendar" on={settings.showCalendar} disabled={saving} onChange={() => update({ showCalendar: !settings.showCalendar })} />
-            <Switch
-              label="Routes"
-              on={settings.showCalendar && settings.showRoutes}
-              disabled={saving || !settings.showCalendar}
-              onChange={() => update({ showRoutes: !settings.showRoutes })}
-            />
-          </div>
-        </>
+      {shareable && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="text-muted">Show visitors</span>
+          <Switch label="Calendar" on={settings.showCalendar} disabled={saving} onChange={() => update({ showCalendar: !settings.showCalendar })} />
+          <Switch
+            label="Routes"
+            on={settings.showCalendar && settings.showRoutes}
+            disabled={saving || !settings.showCalendar}
+            onChange={() => update({ showRoutes: !settings.showRoutes })}
+          />
+        </div>
+      )}
+      {/* Only You activities are left out for everyone, the athlete included (lib/sharing.ts). */}
+      {onlyMe > 0 && (
+        <p className="text-[11px] leading-relaxed text-muted">
+          {onlyMe === 1 ? "1 activity is" : `${onlyMe.toLocaleString("en-US")} activities are`} set to “Only You” on Strava, so{" "}
+          {onlyMe === 1 ? "it isn’t" : "they aren’t"} on your card.
+        </p>
       )}
       {error && <p className="text-[11px] text-red-300">{error}</p>}
     </div>

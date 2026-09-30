@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { parsePreview } from "@/lib/access";
 import { getRoutesForDay } from "@/lib/calendar";
 import { errorResponse } from "@/lib/errors";
 import { getSessionAthleteId } from "@/lib/session";
@@ -12,9 +11,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/scout/[usern
     return Response.json({ error: "bad_request", message: "date must be YYYY-MM-DD" }, { status: 400 });
   }
   try {
-    const routes = await getRoutesForDay(username, date, await getSessionAthleteId(), {
-      preview: parsePreview(req.nextUrl.searchParams.get("view")),
-    });
+    const routes = await getRoutesForDay(username, date, await getSessionAthleteId());
     return Response.json({ date, routes }, { headers: { "Cache-Control": "private, max-age=300" } });
   } catch (err) {
     return errorResponse(err);
