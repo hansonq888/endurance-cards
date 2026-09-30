@@ -3,7 +3,9 @@ import { after } from "next/server";
 import { defaultSettings, requireOwner, resolveViewer, type Viewer } from "./access";
 import { sharedActivities } from "./sharing";
 import { buildSharedCard, ENGINE_VERSION, rerateCard, routesByDay, WINDOW_DAYS } from "./engine";
+import { env } from "./env";
 import { CooldownError, NotFoundError, StravaAuthError } from "./errors";
+import { cardImage, prerenderShareImages } from "./share-images";
 import {
   acquireScoutLock,
   claimRescoutCooldown,
@@ -59,6 +61,7 @@ export async function scoutAthlete(athleteId: number): Promise<PlayerCard> {
       await clearDirty(athleteId);
       card = await scoutOnce(athleteId);
     } while ((await isDirty(athleteId)) && ++passes < 2);
+    prerenderLater(card);
     return card;
   } catch (err) {
     if (err instanceof StravaAuthError) {
@@ -103,6 +106,19 @@ async function scoutOnce(athleteId: number): Promise<PlayerCard> {
   // Only You activities never reach storage, route shapes included.
   await saveRoutes(athleteId, "recent", routesByDay(sharedActivities(activities)));
   return card;
+}
+
+/** After the response: draw the share images for the new card, so Save is instant. */
+function prerenderLater(card: PlayerCard): void {
+  // The story is signed with the site's address; without APP_URL there's no request host here, so skip it.
+  const host = env.appUrl ? new URL(env.appUrl).host : null;
+  after(async () => {
+    try {
+      await (host ? prerenderShareImages(card, host) : cardImage(card));
+    } catch (err) {
+      console.warn(`[kudex] couldn't pre-render share images for ${card.athleteId}:`, (err as Error).message);
+    }
+  });
 }
 
 /** A card plus what the current viewer is allowed to see of it. */

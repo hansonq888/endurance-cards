@@ -53,8 +53,10 @@ export function ShareBar({
     if (saveMenu.current) saveMenu.current.open = false;
   };
 
-  // Phones: saving goes through the share sheet ("Save Image" → Photos, or straight to Instagram).
-  // iOS only opens it right after a tap, so the images are fetched as soon as the menu opens.
+  // Images are fetched once and kept: the owner's page loads them in the background, and
+  // everyone else starts loading on hover or touch, so Save rarely waits on the server.
+  // Phones save through the share sheet ("Save Image" → Photos, or straight to Instagram);
+  // iOS only opens it right after a tap, so loading has to start before the tap lands.
   const blobs = useRef(new Map<string, Promise<Blob>>());
   const fetchBlob = (url: string) => {
     let pending = blobs.current.get(url);
@@ -65,6 +67,7 @@ export function ShareBar({
     }
     return pending;
   };
+  const prefetch = () => [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}));
   // The owner is the one who saves and shares: fetch both images once the page has settled.
   // The URLs are versioned and browser-cacheable, so the later tap is served from cache.
   useEffect(() => {
@@ -94,23 +97,35 @@ export function ShareBar({
 
   async function save(e: React.MouseEvent<HTMLAnchorElement>, url: string, filename: string, label: string) {
     closeSaveMenu();
-    if (!onPhone()) return; // computers: the link's normal download
     e.preventDefault();
     setPreparing(label);
-    try {
-      const blob = await fetchBlob(url);
-      const file = new File([blob], filename, { type: blob.type || "image/png" });
-      if (!navigator.canShare({ files: [file] })) throw new Error("files not shareable");
-      setPreparing(null);
-      await shareFile(file, label);
-    } catch {
-      // Sharing files isn't possible here: fall back to a plain download.
-      setPreparing(null);
+    const download = (href: string) => {
       const a = document.createElement("a");
-      a.href = url;
+      a.href = href;
       a.download = filename;
       a.click();
+    };
+    let blob: Blob;
+    try {
+      blob = await fetchBlob(url);
+    } catch {
+      // Couldn't load it here: let the browser download it directly.
+      setPreparing(null);
+      return download(url);
     }
+    setPreparing(null);
+    const file = new File([blob], filename, { type: blob.type || "image/png" });
+    if (onPhone() && navigator.canShare({ files: [file] })) {
+      try {
+        return await shareFile(file, label);
+      } catch {
+        // Share sheet failed for another reason: fall through to a download.
+      }
+    }
+    // Computers (or no share sheet): save the copy we already have.
+    const href = URL.createObjectURL(blob);
+    download(href);
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
   }
   const text = `${name}'s ${BRAND.name} card: ${summary}`;
 
@@ -165,11 +180,10 @@ export function ShareBar({
       <details
         ref={saveMenu}
         className="group relative"
-        // Start loading as soon as a finger touches Save, not when the menu finishes opening.
-        onPointerDown={() => onPhone() && [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}))}
-        onToggle={(e) => {
-          if (e.currentTarget.open && onPhone()) [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}));
-        }}
+        // Start loading on hover or the first touch, not when the menu finishes opening.
+        onPointerEnter={prefetch}
+        onPointerDown={prefetch}
+        onToggle={(e) => e.currentTarget.open && prefetch()}
       >
         <summary className={`${btn} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
           <Download className={`h-3.5 w-3.5 ${preparing ? "animate-pulse text-strava" : ""}`} aria-hidden /> {preparing ? "Preparing…" : "Save"}
