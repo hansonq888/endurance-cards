@@ -17,6 +17,7 @@ export function ShareBar({
   storyUrl,
   summary,
   downloadOnly = false,
+  warm = false,
 }: {
   slug: string;
   name: string;
@@ -27,6 +28,8 @@ export function ShareBar({
   summary: string;
   /** Private cards: only the owner's downloads, no links to share. */
   downloadOnly?: boolean;
+  /** Owner's own card: load the images in the background so Save and Share are instant. */
+  warm?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,6 +65,13 @@ export function ShareBar({
     }
     return pending;
   };
+  // The owner is the one who saves and shares: fetch both images once the page has settled.
+  // The URLs are versioned and browser-cacheable, so the later tap is served from cache.
+  useEffect(() => {
+    if (!warm) return;
+    const id = setTimeout(() => [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {})), 2500);
+    return () => clearTimeout(id);
+  }, [warm, imageUrl, storyUrl]);
   const onPhone = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !!navigator.canShare;
 
   async function save(e: React.MouseEvent<HTMLAnchorElement>, url: string, filename: string) {
@@ -69,7 +79,8 @@ export function ShareBar({
     if (!onPhone()) return; // computers: the link's normal download
     e.preventDefault();
     try {
-      const file = new File([await fetchBlob(url)], filename, { type: "image/png" });
+      const blob = await fetchBlob(url);
+      const file = new File([blob], filename, { type: blob.type || "image/png" });
       if (!navigator.canShare({ files: [file] })) throw new Error("files not shareable");
       // Image only (no text or link), so the sheet offers "Save Image".
       await navigator.share({ files: [file] });
@@ -126,6 +137,8 @@ export function ShareBar({
       <details
         ref={saveMenu}
         className="group relative"
+        // Start loading as soon as a finger touches Save, not when the menu finishes opening.
+        onPointerDown={() => onPhone() && [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}))}
         onToggle={(e) => {
           if (e.currentTarget.open && onPhone()) [imageUrl, storyUrl].forEach((u) => fetchBlob(u).catch(() => {}));
         }}
@@ -140,9 +153,9 @@ export function ShareBar({
           </a>
           <a
             href={storyUrl}
-            download={`${slug}-${BRAND.fileSlug}-story.png`}
+            download={`${slug}-${BRAND.fileSlug}-story.jpg`}
             className={item}
-            onClick={(e) => save(e, storyUrl, `${slug}-${BRAND.fileSlug}-story.png`)}
+            onClick={(e) => save(e, storyUrl, `${slug}-${BRAND.fileSlug}-story.jpg`)}
           >
             <Smartphone className="h-3.5 w-3.5" aria-hidden /> Story (1080×1920)
           </a>

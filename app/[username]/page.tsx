@@ -64,6 +64,8 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
   const share = encodeURIComponent(viewer.shareSlug);
   const pageUrl = `${origin}/${share}`;
   const imageUrl = `${origin}/${share}.png`;
+  // Versioned image URLs for Save/Share: a new scout means a new URL, so browsers can cache them.
+  const version = `?v=${Date.parse(card.scoutedAt).toString(36)}`;
   const isPrivate = settings.visibility === "private";
   const showCalendar = isOwner || settings.showCalendar;
   const scouted = new Date(card.scoutedAt);
@@ -121,10 +123,11 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
               slug={card.slug}
               name={card.name}
               pageUrl={pageUrl}
-              imageUrl={imageUrl}
-              storyUrl={`${origin}/api/scout/${share}/story`}
+              imageUrl={`${imageUrl}${version}`}
+              storyUrl={`${origin}/api/scout/${share}/story${version}`}
               summary={`${card.overall} ${TIER_THEMES[card.tier].label} · ${card.archetype}`}
               downloadOnly={isPrivate}
+              warm={isOwner}
             />
           </div>
           {isOwner && (
