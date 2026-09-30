@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { PoweredByStrava } from "@/components/StravaBrand";
 import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
 import { SectionHeading } from "@/components/SectionHeading";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -26,7 +26,8 @@ const SECTIONS: { title: string; items: string[] }[] = [
     items: [
       "Your card: ratings, trophies and the summary numbers behind them (e.g. hours per sport, longest session, climbing per year).",
       "Per-day training minutes and PR counts, for the calendar. Race names, dates, distances and times.",
-      "Route shapes: each route has its first and last 400 m cut off, then is shrunk into a box with no coordinates, so it can't be placed back on a map. We never store GPS coordinates.",
+      "Route shapes, with the activity's name and summary numbers: each route has its first and last 400 m cut off, then is shrunk into a box with no coordinates, so it can't be placed back on a map. We never store GPS coordinates.",
+      "The card and story images you save or share, so they load quickly.",
       "Your rating at each refresh, for the trend line. Your visibility settings.",
       "Strava sign-in tokens, encrypted, so your card can refresh without you being signed in.",
       "Not stored: raw GPS tracks, heart rate, your email, your password, or anything from Strava we don't use above.",
@@ -48,7 +49,8 @@ const SECTIONS: { title: string; items: string[] }[] = [
     title: "How long we keep it",
     items: [
       "Your card refreshes about once a day while it's being viewed, and when you finish an activity.",
-      "If nobody views it for 30 days, the cached card expires; it's rebuilt from Strava next time it's opened.",
+      "If nobody views it for 30 days, the cached card expires; it's rebuilt from Strava next time it's opened. Saved card and story images expire after 7 days.",
+      "Past-year calendars are dropped when you delete or hide an activity on Strava, and reloaded when next opened.",
       "Everything else is kept until you remove your card or revoke access.",
     ],
   },
@@ -103,10 +105,7 @@ export default function PrivacyPage() {
         ))}
       </div>
 
-      <footer className="mt-16 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
-        <PoweredByStrava />
-        <span>Not affiliated with Strava</span>
-      </footer>
+      <SiteFooter className="mt-16" privacyLink={false} />
     </main>
   );
 }

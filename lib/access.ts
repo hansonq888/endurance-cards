@@ -71,7 +71,7 @@ export async function resolveViewer(slug: string, sessionAthleteId: number | nul
  * caching; this just absorbs embed bursts, and stays short so switching a card
  * to link-only or private takes effect on CDNs within minutes.
  */
-export const PUBLIC_CACHE = "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
+const PUBLIC_CACHE = "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
 
 /**
  * Cache-Control for card images whose URL carries the card's version (?v=, see
@@ -84,8 +84,8 @@ export function imageCacheControl(viewer: Viewer, versioned: boolean): string {
 }
 
 /** Cache-Control for a response that went through resolveViewer (owner and private views are never shared-cached). */
-export function cacheControlFor(viewer: Viewer, publicValue = PUBLIC_CACHE): string {
-  return viewer.publiclyCacheable ? publicValue : "private, no-store";
+export function cacheControlFor(viewer: Viewer): string {
+  return viewer.publiclyCacheable ? PUBLIC_CACHE : "private, no-store";
 }
 
 /**

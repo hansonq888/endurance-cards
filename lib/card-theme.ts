@@ -86,3 +86,8 @@ export function holoVars(tier: CardTier): Record<string, string> {
   const [a, b, c, d] = TIER_THEMES[tier].holo;
   return { "--holo-1": a, "--holo-2": b, "--holo-3": c, "--holo-4": d };
 }
+
+/** Foil sheen for a card on screen: only the "holo rare" tiers get one. */
+export function holoFor(tier: CardTier): Record<string, string> | undefined {
+  return TIER_THEMES[tier].holoCard ? holoVars(tier) : undefined;
+}

@@ -5,8 +5,8 @@
 import type { StravaActivityTotal, StravaAthlete, StravaAthleteStats, StravaSummaryActivity } from "../types/strava";
 import type { RawScoutData } from "./engine";
 import { encodePolyline, type LatLng } from "./polyline";
+import { DAY_MS } from "./format";
 
-const DAY = 86_400_000;
 
 /** Mulberry32 PRNG so fixtures are stable across runs. */
 function rng(seed: number) {
@@ -123,7 +123,7 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
       const isWorkout = unit(id * 7919) < (profile.workoutShare ?? 0) && !s.minutes;
       const speed = between(s.speed) * (isWorkout ? 1.15 : 1);
       // Mostly 6am–8pm, with the odd pre-dawn start (drives Dawn Patrol realistically).
-      const dayStart = Math.floor((nowMs - day * DAY) / DAY) * DAY;
+      const dayStart = Math.floor((nowMs - day * DAY_MS) / DAY_MS) * DAY_MS;
       const hour = rand() < 0.08 ? between([4.5, 6]) : between([6, 20]);
       const start = new Date(Math.min(nowMs - 3_600_000, dayStart + hour * 3_600_000));
       const moving = s.minutes ? between(s.minutes) * 60 : (km * 1000) / speed;
@@ -169,7 +169,7 @@ export function syntheticAthlete(profile: AthleteProfile, now = new Date()): Raw
     state: "CO",
     country: "United States",
     sex: null,
-    created_at: new Date(nowMs - profile.tenureYears * 365.25 * DAY).toISOString(),
+    created_at: new Date(nowMs - profile.tenureYears * 365.25 * DAY_MS).toISOString(),
     updated_at: now.toISOString(),
     profile: profile.avatar ?? "avatar/athlete/large.png",
     profile_medium: "avatar/athlete/medium.png",

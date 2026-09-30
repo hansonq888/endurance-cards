@@ -3,11 +3,8 @@
 import { useState, type CSSProperties } from "react";
 import { PlayerCard } from "./PlayerCard";
 import { TiltCard } from "./TiltCard";
-import { holoVars, TIER_THEMES } from "@/lib/card-theme";
+import { holoFor, TIER_THEMES } from "@/lib/card-theme";
 import type { PlayerCard as PlayerCardData } from "@/types/player";
-
-/** Foil sheen for "holo rare" tiers only. */
-const holoFor = (card: PlayerCardData) => (TIER_THEMES[card.tier].holoCard ? holoVars(card.tier) : undefined);
 
 /** Where each seat of the fan sits: left, centre, right. */
 const SEATS: CSSProperties[] = [
@@ -54,7 +51,7 @@ export function CardFan({ cards, className = "" }: { cards: [PlayerCardData, Pla
             style={SEATS[seatOf[i]]}
           >
             <div className="deal" style={{ "--d": DEAL[i].d, "--deal-r": DEAL[i].r } as CSSProperties}>
-              <TiltCard ambient holo={holoFor(card)} style={{ "--float-delay": DEAL[i].float } as CSSProperties}>
+              <TiltCard ambient holo={holoFor(card.tier)} style={{ "--float-delay": DEAL[i].float } as CSSProperties}>
                 <PlayerCard card={card} className="w-full" />
               </TiltCard>
             </div>

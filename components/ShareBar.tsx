@@ -128,11 +128,11 @@ export function ShareBar({
     if (!navigator.share) return copyLink();
     setBusy(true);
     try {
-      // Attach the image where the platform allows it (most phones do).
-      const blob = await fetch(imageUrl).then((r) => r.blob());
-      const file = new File([blob], `${slug}-${BRAND.fileSlug}.png`, { type: "image/png" });
-      const withFile = { files: [file], title: text, text, url: pageUrl };
-      await navigator.share(navigator.canShare?.(withFile) ? withFile : { title: text, text, url: pageUrl });
+      // Attach the image where the platform allows it (most phones do); if it won't load, share just the link.
+      const linkOnly = { title: text, text, url: pageUrl };
+      const blob = await fetchBlob(imageUrl).catch(() => null);
+      const withFile = blob && { ...linkOnly, files: [new File([blob], `${slug}-${BRAND.fileSlug}.png`, { type: "image/png" })] };
+      await navigator.share(withFile && navigator.canShare?.(withFile) ? withFile : linkOnly);
     } catch (err) {
       // AbortError = the user closed the sheet; anything else, fall back to copying.
       if ((err as Error).name !== "AbortError") await copyLink();

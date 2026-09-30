@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import { PoweredByStrava } from "@/components/StravaBrand";
 import type { Metadata } from "next";
 import { Wordmark } from "@/components/Wordmark";
 import Link from "next/link";
@@ -13,13 +12,14 @@ import { CardSettingsPanel } from "@/components/CardSettingsPanel";
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { RaceLog, RatingTrend, SportMix, StatBreakdown, TrophyCabinet } from "@/components/ScoutReport";
 import { calendarYears } from "@/lib/calendar";
-import { holoVars, TIER_THEMES } from "@/lib/card-theme";
+import { holoFor, TIER_THEMES } from "@/lib/card-theme";
 import { NotFoundError } from "@/lib/errors";
 import { getCardBySlug } from "@/lib/scout";
 import { isMeasured } from "@/lib/engine";
 import { ATTRIBUTE_KEYS } from "@/types/player";
 import { getSessionAthleteId } from "@/lib/session";
 import { publicOrigin } from "@/lib/url";
+import { SiteFooter } from "@/components/SiteFooter";
 
 /** A malformed %-sequence in the URL is just an unknown slug (404), not a crash. */
 function safeDecode(s: string): string {
@@ -100,7 +100,7 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
               className="glow-in pointer-events-none absolute left-1/2 top-1/2 h-[110%] w-[150%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
               style={{ background: "radial-gradient(closest-side, rgba(252,76,2,0.55), transparent)" }}
             />
-            <TiltCard ambient holo={TIER_THEMES[card.tier].holoCard ? holoVars(card.tier) : undefined}>
+            <TiltCard ambient holo={holoFor(card.tier)}>
               <PlayerCard card={card} className="w-full" />
             </TiltCard>
           </div>
@@ -166,12 +166,7 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
         </div>
       )}
 
-      <footer className="mt-12 flex items-center justify-center gap-4 text-xs text-muted">
-        <PoweredByStrava />
-        <Link href="/privacy" className="hover:text-foreground">
-          Privacy
-        </Link>
-      </footer>
+      <SiteFooter className="mt-12" />
     </main>
   );
 }

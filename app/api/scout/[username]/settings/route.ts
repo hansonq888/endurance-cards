@@ -3,9 +3,7 @@ import { ensureSettings, newShareToken, requireOwner } from "@/lib/access";
 import { errorResponse } from "@/lib/errors";
 import { saveSettings } from "@/lib/redis";
 import { getSessionAthleteId } from "@/lib/session";
-import type { CardSettings, Visibility } from "@/types/player";
-
-const VISIBILITIES: Visibility[] = ["unlisted", "private"];
+import { VISIBILITIES, type CardSettings, type Visibility } from "@/types/player";
 
 /**
  * PATCH /api/scout/:username/settings  (owner only)
