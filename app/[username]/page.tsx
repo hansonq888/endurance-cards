@@ -90,13 +90,14 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
       {/* Card in the centre, supporting detail on either side (stacked below it on small screens). */}
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)_minmax(0,1fr)] lg:gap-6">
         <section className="relative order-first flex flex-col items-center lg:order-none lg:col-start-2 lg:row-start-1">
-          <div
-            aria-hidden
-            className="glow-in pointer-events-none absolute left-1/2 top-[40%] h-[70%] w-[140%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
-            style={{ background: "radial-gradient(closest-side, rgba(252,76,2,0.55), transparent)" }}
-          />
           {/* Dealt in on load (wrapper), then floats, catches the light and follows the phone's tilt (ambient). */}
           <div className="deal relative w-full max-w-[440px]">
+            {/* Glow sized to the card, not the column, so opening Card settings below doesn't stretch it. */}
+            <div
+              aria-hidden
+              className="glow-in pointer-events-none absolute left-1/2 top-1/2 h-[110%] w-[150%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
+              style={{ background: "radial-gradient(closest-side, rgba(252,76,2,0.55), transparent)" }}
+            />
             <TiltCard ambient holo={TIER_THEMES[card.tier].holoCard ? holoVars(card.tier) : undefined}>
               <PlayerCard card={card} className="w-full" />
             </TiltCard>
