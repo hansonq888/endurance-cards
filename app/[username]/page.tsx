@@ -11,7 +11,7 @@ import { ShareBar } from "@/components/ShareBar";
 import { TiltCard } from "@/components/TiltCard";
 import { CardSettingsPanel } from "@/components/CardSettingsPanel";
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
-import { PANEL, RaceLog, RatingTrend, SportMix, StatBreakdown, TrophyCabinet } from "@/components/ScoutReport";
+import { RaceLog, RatingTrend, SportMix, StatBreakdown, TrophyCabinet } from "@/components/ScoutReport";
 import { calendarYears } from "@/lib/calendar";
 import { holoVars, TIER_THEMES } from "@/lib/card-theme";
 import { NotFoundError } from "@/lib/errors";
@@ -145,7 +145,8 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
       </div>
 
       {showCalendar && (
-        <section className={`${PANEL} reveal mt-6`}>
+        <section className="reveal mt-14 border-t border-line pt-8">
+          {/* Open layout, no panel: the calendar sits on the page under one divider. */}
           <ActivityHeatmap
             slug={viewSlug}
             years={calendarYears(card)}

@@ -217,8 +217,8 @@ export function ActivityHeatmap({
 
   return (
     <div className="font-accent">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line pb-2">
-        <h2 className="display text-sm leading-none tracking-tight">Training calendar</h2>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <h2 className="display text-3xl leading-none tracking-tight sm:text-4xl">Training calendar</h2>
         {/* Underline tabs: the active one's orange bar sits on the header rule and slides between tabs. */}
         <div role="tablist" aria-label="Calendar view" className="relative -mb-2 flex items-end gap-5 self-end">
           {(
@@ -272,10 +272,12 @@ export function ActivityHeatmap({
                     role="option"
                     aria-selected={active}
                     onClick={() => choose(p)}
-                    className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-[11px] uppercase tracking-wider tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-strava/60 ${
-                      active ? "bg-strava font-medium text-[#140f0c]" : "text-muted hover:bg-surface-2 hover:text-foreground"
+                    className={`flex shrink-0 items-center gap-2 whitespace-nowrap px-1 py-1.5 text-left text-[11px] uppercase tracking-wider tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-strava/60 ${
+                      active ? "font-medium text-strava" : "text-muted hover:text-foreground"
                     }`}
                   >
+                    {/* Plain text list: the selected period gets a dot, not a box. */}
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-strava" : "bg-transparent"}`} aria-hidden />
                     {p === "recent" ? "Last 12 months" : p}
                   </button>
                 );
@@ -285,11 +287,11 @@ export function ActivityHeatmap({
         </aside>
 
         <div className="min-w-0 flex-1">
-          <dl className="mb-4 flex flex-wrap gap-x-8 gap-y-2 text-xs">
+          <dl className="mb-6 flex flex-wrap gap-x-10 gap-y-4 text-xs">
             {isRecent && (
               <div>
                 <dt className="text-[11px] uppercase tracking-wider text-muted">Form</dt>
-                <dd className="mt-0.5 text-base font-medium">
+                <dd className="display mt-1 text-2xl leading-none tracking-tight">
                   {stats.form}{" "}
                   {trend && (
                     <span className={stats.change! >= 0 ? "text-strava" : "text-muted"}>
@@ -316,7 +318,7 @@ export function ActivityHeatmap({
             ).map(([k, v]) => (
               <div key={k}>
                 <dt className="text-[11px] uppercase tracking-wider text-muted">{k}</dt>
-                <dd className="mt-0.5 text-base font-medium">{v}</dd>
+                <dd className="display mt-1 text-2xl leading-none tracking-tight">{v}</dd>
               </div>
             ))}
           </dl>
@@ -372,7 +374,7 @@ export function ActivityHeatmap({
                           y={y}
                           width={CELL}
                           height={CELL}
-                          rx={2.5}
+                          rx={CELL / 2}
                           fill={heatStep(d.minutes).color}
                           stroke={picked === d ? "var(--strava)" : active ? "var(--foreground)" : "none"}
                           strokeWidth={picked === d ? 2 : 1.5}
@@ -452,7 +454,7 @@ export function ActivityHeatmap({
                 <span className="flex items-center gap-1.5">
                   <span>Less</span>
                   {HEAT_STEPS.map((s) => (
-                    <span key={s.label} title={s.label} className="h-3 w-3 rounded-[3px]" style={{ background: s.color }} />
+                    <span key={s.label} title={s.label} className="h-3 w-3 rounded-full" style={{ background: s.color }} />
                   ))}
                   <span>More</span>
                 </span>
