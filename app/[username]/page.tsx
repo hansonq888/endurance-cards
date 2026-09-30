@@ -157,7 +157,7 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
       )}
 
       {!isPrivate && (
-        <div className="mt-16 sm:mt-20">
+        <div className="mt-24 sm:mt-32">
           <EmbedSnippet pageUrl={pageUrl} imageUrl={imageUrl} name={card.name} />
         </div>
       )}
