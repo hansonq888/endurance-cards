@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { renderCardPng } from "@/lib/card-renderer";
 import { errorResponse } from "@/lib/errors";
-import { cacheControlFor } from "@/lib/access";
+import { imageCacheControl } from "@/lib/access";
 import { getCardBySlug } from "@/lib/scout";
 import { getSessionAthleteId } from "@/lib/session";
 
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/scout/[usern
   const { username } = await ctx.params;
   try {
     const { card, stale, viewer } = await getCardBySlug(username, await getSessionAthleteId());
-    return await renderCardPng(card, { headers: { "Cache-Control": cacheControlFor(viewer), "X-Card-Stale": String(stale) } });
+    return await renderCardPng(card, { headers: { "Cache-Control": imageCacheControl(viewer, req.nextUrl.searchParams.has("v")), "X-Card-Stale": String(stale) } });
   } catch (err) {
     return errorResponse(err);
   }

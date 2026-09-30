@@ -73,6 +73,16 @@ export async function resolveViewer(slug: string, sessionAthleteId: number | nul
  */
 export const PUBLIC_CACHE = "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
 
+/**
+ * Cache-Control for card images whose URL carries the card's version (?v=, see
+ * the profile page): the owner's own browser may then keep them, since a new
+ * scout means a new URL. Still never in shared caches unless shareable.
+ */
+export function imageCacheControl(viewer: Viewer, versioned: boolean): string {
+  if (!viewer.publiclyCacheable && versioned) return "private, max-age=86400";
+  return cacheControlFor(viewer);
+}
+
 /** Cache-Control for a response that went through resolveViewer (owner and private views are never shared-cached). */
 export function cacheControlFor(viewer: Viewer, publicValue = PUBLIC_CACHE): string {
   return viewer.publiclyCacheable ? publicValue : "private, no-store";
