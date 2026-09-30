@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { PlayerCard } from "@/types/player";
 import { TURTLE_ON_DARK, turtleDataUri } from "./turtle";
+import { BRAND } from "./brand";
 import { CardFace } from "./card-face";
 import { isDemoAvatar } from "./engine";
 import { CARD_H, CARD_W, PNG_SCALE, TIER_THEMES } from "./card-theme";
@@ -194,8 +195,14 @@ function storyBackdrop(card: PlayerCard): string {
 }
 
 /** 1080×1920 story image: the finished card on a grainy tier gradient, signed off with the turtle and link. */
+/** Strava's official white "Powered by Strava" logo, read from public/strava (unmodified). */
+async function poweredByStravaUri(): Promise<string | null> {
+  const svg = await readFile(join(process.cwd(), "public", "strava", "powered-by-strava.svg")).catch(() => null);
+  return svg ? `data:image/svg+xml;base64,${svg.toString("base64")}` : null;
+}
+
 export async function renderStoryPng(card: PlayerCard, link: string, init?: { headers?: Record<string, string> }): Promise<ImageResponse> {
-  const [fonts, avatar] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl)]);
+  const [fonts, avatar, poweredBy] = await Promise.all([loadFonts(), avatarDataUri(card.avatarUrl), poweredByStravaUri()]);
   const t = TIER_THEMES[card.tier];
   return new ImageResponse(
     (
@@ -206,16 +213,20 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
           <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 700, letterSpacing: 8, color: "#a89d92" }}>
             {`${t.label.toUpperCase()} · ${t.terrain.toUpperCase()}`}
           </span>
-          <span style={{ ...PNG_FONTS.display, fontSize: 64, marginTop: 14 }}>MY PLAYER CARD</span>
+          <span style={{ ...PNG_FONTS.display, fontSize: 64, marginTop: 14 }}>{`MY ${BRAND.name.toUpperCase()} CARD`}</span>
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", marginTop: 70 }}>
           <FinishedCard card={card} scale={STORY_SCALE} avatar={avatar} />
         </div>
-        {/* Sign-off: the turtle with the link people can open underneath. */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 110 }}>
+        {/* Sign-off: the turtle and the site, then Strava's official logo, smaller and separate (brand guidelines). */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 84 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={turtleDataUri(TURTLE_ON_DARK, 130)} alt="" width={130} height={130} />
           <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 4 }}>{link}</span>
+          {poweredBy && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={poweredBy} alt="Powered by Strava" width={237} height={24} style={{ marginTop: 34, opacity: 0.75 }} />
+          )}
         </div>
       </div>
     ),

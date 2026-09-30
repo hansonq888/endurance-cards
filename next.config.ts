@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   // The PNG renderers read vendored fonts and the demo-card photos from disk at runtime.
   outputFileTracingIncludes: {
     "/api/scout/[username]/card": ["./assets/fonts/**", "./public/demo-avatars/**"],
-    "/api/scout/[username]/story": ["./assets/fonts/**", "./public/demo-avatars/**"],
+    "/api/scout/[username]/story": ["./assets/fonts/**", "./public/demo-avatars/**", "./public/strava/powered-by-strava.svg"],
   },
   images: {
     remotePatterns: [
