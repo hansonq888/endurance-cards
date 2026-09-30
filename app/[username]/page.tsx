@@ -19,6 +19,7 @@ import { isMeasured } from "@/lib/engine";
 import { ATTRIBUTE_KEYS } from "@/types/player";
 import { getSessionAthleteId } from "@/lib/session";
 import { publicOrigin } from "@/lib/url";
+import { imageVersion } from "@/lib/card-version";
 import { SiteFooter } from "@/components/SiteFooter";
 
 /** A malformed %-sequence in the URL is just an unknown slug (404), not a crash. */
@@ -64,8 +65,8 @@ export default async function ProfilePage({ params }: PageProps<"/[username]">) 
   const share = encodeURIComponent(viewer.shareSlug);
   const pageUrl = `${origin}/${share}`;
   const imageUrl = `${origin}/${share}.png`;
-  // Versioned image URLs for Save/Share: a new scout means a new URL, so browsers can cache them.
-  const version = `?v=${Date.parse(card.scoutedAt).toString(36)}`;
+  // Versioned image URLs for Save/Share: a visible change means a new URL, so browsers can cache them.
+  const version = `?v=${imageVersion(card)}`;
   const isPrivate = settings.visibility === "private";
   const showCalendar = isOwner || settings.showCalendar;
   const scouted = new Date(card.scoutedAt);
