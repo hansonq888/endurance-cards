@@ -214,19 +214,20 @@ export async function renderStoryPng(card: PlayerCard, link: string, init?: { he
             {`${t.label.toUpperCase()} · ${t.terrain.toUpperCase()}`}
           </span>
           <span style={{ ...PNG_FONTS.display, fontSize: 64, marginTop: 14 }}>{`MY ${BRAND.name.toUpperCase()} CARD`}</span>
+          {/* Strava's official logo under the headline: smaller than the app's name, as the brand guidelines ask. */}
+          {poweredBy && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={poweredBy} alt="Powered by Strava" width={237} height={24} style={{ marginTop: 22, opacity: 0.75 }} />
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", marginTop: 70 }}>
           <FinishedCard card={card} scale={STORY_SCALE} avatar={avatar} />
         </div>
-        {/* Sign-off: the turtle and the site, then Strava's official logo, smaller and separate (brand guidelines). */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: "auto", marginBottom: 84 }}>
+        {/* Sign-off: the turtle beside the site's address. The drawing has padding in its box, so pull it in. */}
+        <div style={{ display: "flex", alignItems: "center", marginTop: "auto", marginBottom: 120 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={turtleDataUri(TURTLE_ON_DARK, 130)} alt="" width={130} height={130} />
-          <span style={{ ...PNG_FONTS.body, fontSize: 30, fontWeight: 500, color: "#a89d92", marginTop: 4 }}>{link}</span>
-          {poweredBy && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={poweredBy} alt="Powered by Strava" width={237} height={24} style={{ marginTop: 34, opacity: 0.75 }} />
-          )}
+          <img src={turtleDataUri(TURTLE_ON_DARK, 110)} alt="" width={110} height={110} style={{ margin: "-18px -8px -18px -22px" }} />
+          <span style={{ ...PNG_FONTS.body, fontSize: 32, fontWeight: 500, color: "#a89d92" }}>{link}</span>
         </div>
       </div>
     ),
