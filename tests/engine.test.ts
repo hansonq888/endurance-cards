@@ -251,14 +251,16 @@ describe("rating engine", () => {
   });
 
   it("applies card visibility", () => {
-    const pub = { visibility: "public" as const };
     const link = { visibility: "unlisted" as const };
     const priv = { visibility: "private" as const };
-    expect(canView(pub, false, false)).toBe(true);
+    // Link only: the secret link opens it; the username page doesn't.
     expect(canView(link, false, false)).toBe(false);
     expect(canView(link, false, true)).toBe(true);
+    // Private: even the secret link doesn't.
     expect(canView(priv, false, true)).toBe(false);
-    for (const s of [pub, link, priv]) expect(canView(s, true, false)).toBe(true);
+    for (const s of [link, priv]) expect(canView(s, true, false)).toBe(true);
+    // Development demo cards open at their username.
+    expect(canView({ ...link, demo: true }, false, false)).toBe(true);
   });
 
   it("never lets a username shadow app routes or share links", () => {

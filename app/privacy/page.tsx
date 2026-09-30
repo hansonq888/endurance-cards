@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 // Keep this page in sync with the code: lib/engine.ts (what's derived), lib/redis.ts (what's stored),
-// lib/access.ts + lib/audience.ts (who sees what), lib/polyline.ts (route trimming).
+// lib/access.ts + lib/sharing.ts (who sees what), lib/polyline.ts (route trimming).
 const SECTIONS: { title: string; items: string[] }[] = [
   {
     title: "What we read from Strava",
@@ -35,13 +35,13 @@ const SECTIONS: { title: string; items: string[] }[] = [
   {
     title: "Who can see your card",
     items: [
-      "You choose, and can change it any time from your card: Public (anyone, at your username, and findable by username search), Link only (only people with your secret link), or Private (only you).",
-      "New cards start from how you share on Strava: Public if most of your training is visible to Everyone there, Link only if most is Followers-only, and Private if most is Only You.",
-      "You can also hide your training calendar, races and route shapes from visitors.",
-      "Visitors only see what they could already see on Strava. On a public card, their version of your card (rating, stats, trophies, races, calendar and routes) is built only from activities set to Everyone. With your link, from Everyone and Followers activities. Activities set to Only You count only for you.",
-      "When you change an activity's visibility on Strava, your card is rebuilt within a few minutes. You can preview exactly what visitors see from your card settings.",
+      "Cards are shared by private link: only people you send your link to can open it. There's no public directory or search, and you can switch your card to Private (only you) or reset the link at any time.",
+      "Everyone who opens your card sees exactly the card you see.",
+      "Your card is built from activities you share on Strava with Everyone or your Followers. Activities set to Only You are never on your card, for anyone, and their details (including route shapes) aren't stored.",
+      "You can also hide your training calendar, races and route shapes from people you share with.",
+      "When you change an activity's visibility on Strava, your card is rebuilt within a few minutes.",
       "Trophy progress and locked trophies are only ever shown to you.",
-      "Link-only and private cards are hidden from search engines. Private cards and their images are never stored in shared caches.",
+      "Cards are hidden from search engines. Private cards and their images are never stored in shared caches.",
     ],
   },
   {

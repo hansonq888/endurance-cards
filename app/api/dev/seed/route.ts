@@ -1,8 +1,9 @@
 import { calendarYears, yearCalendar } from "@/lib/calendar";
-import { buildAudienceCards, routesByDay } from "@/lib/engine";
+import { buildSharedCard, routesByDay } from "@/lib/engine";
 import { PROFILES, syntheticAthlete } from "@/lib/fixtures";
 import { defaultSettings } from "@/lib/access";
-import { saveCardViews, saveRoutes, saveSettings, saveYearCalendar } from "@/lib/redis";
+import { saveCard, saveRoutes, saveSettings, saveYearCalendar } from "@/lib/redis";
+import { sharedActivities } from "@/lib/sharing";
 
 /**
  * Development only: seeds the cache with synthetic athletes so the profile
@@ -18,30 +19,28 @@ export async function GET() {
       raw.athlete.username = `demo-${name.toLowerCase()}`;
       raw.athlete.firstname = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
       raw.athlete.lastname = "";
-      const built = buildAudienceCards(raw, {}, now);
+      const built = buildSharedCard(raw, null, now);
       // Fake a few monthly scouts so the rating-history UI has something to show.
-      const withFakeHistory = <T extends { overall: number; history: { date: string; overall: number }[] }>(c: T): T => ({
-        ...c,
+      const card = {
+        ...built,
         history: [
           ...[5, 4, 3, 2, 1].map((monthsAgo, k) => ({
             date: new Date(now.getTime() - monthsAgo * 30 * 86_400_000).toISOString().slice(0, 10),
-            overall: Math.max(1, c.overall - [6, 5, 3, 3, 1][k]),
+            overall: Math.max(1, built.overall - [6, 5, 3, 3, 1][k]),
           })),
-          ...c.history,
+          ...built.history,
         ],
-      });
-      const cards = { owner: withFakeHistory(built.owner), link: withFakeHistory(built.link), public: withFakeHistory(built.public) };
-      const card = cards.owner;
-      await saveCardViews(cards);
-      // Demo athletes are public so the pages work without signing in.
-      await saveSettings(card.athleteId, { ...defaultSettings(), visibility: "public" });
-      await saveRoutes(card.athleteId, "recent", routesByDay(raw.activities));
+      };
+      await saveCard(card);
+      // Demo cards open at their username without signing in (development only).
+      await saveSettings(card.athleteId, { ...defaultSettings(), demo: true });
+      await saveRoutes(card.athleteId, "recent", routesByDay(sharedActivities(raw.activities)));
       // Fake past calendar years too (real athletes fetch these from Strava on demand).
       for (const year of calendarYears(card, now)) {
         const yearEnd = new Date(Date.UTC(year, 11, 31, 12));
         const past = syntheticAthlete({ ...profile, seed: profile.seed * 1000 + year }, yearEnd);
-        await saveYearCalendar(card.athleteId, yearCalendar(past.activities, year, now));
-        await saveRoutes(card.athleteId, year, routesByDay(past.activities));
+        await saveYearCalendar(card.athleteId, yearCalendar(sharedActivities(past.activities), year, now));
+        await saveRoutes(card.athleteId, year, routesByDay(sharedActivities(past.activities)));
       }
       return card.slug;
     }),

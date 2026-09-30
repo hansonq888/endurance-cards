@@ -34,15 +34,13 @@ const routeCache = new Map<string, RouteShape[]>();
 export function DayRoutes({
   slug,
   day,
-  view,
   onClose,
 }: {
   slug: string;
   day: RouteDay;
-  view?: "link" | "public";
   onClose: () => void;
 }) {
-  const cacheKey = `${slug}:${view ?? "self"}:${day.key}`;
+  const cacheKey = `${slug}:${day.key}`;
   const [state, setState] = useState<{ routes: RouteShape[] | null; error: string | null }>(() => ({
     routes: routeCache.get(cacheKey) ?? null,
     error: null,
@@ -53,7 +51,7 @@ export function DayRoutes({
   useEffect(() => {
     if (routeCache.has(cacheKey)) return;
     let cancelled = false;
-    fetch(`/api/scout/${encodeURIComponent(slug)}/routes?date=${day.key}${view ? `&view=${view}` : ""}`)
+    fetch(`/api/scout/${encodeURIComponent(slug)}/routes?date=${day.key}`)
       .then(async (res) => {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.message ?? "Couldn't load this day's route.");
@@ -64,7 +62,7 @@ export function DayRoutes({
     return () => {
       cancelled = true;
     };
-  }, [slug, day.key, cacheKey, view]);
+  }, [slug, day.key, cacheKey]);
 
   const routes = state.routes;
   const route = routes?.[index];

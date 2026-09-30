@@ -1,6 +1,6 @@
 import "server-only";
 import { resolveViewer } from "./access";
-import { activitiesFor, visibleTo, type Audience, type VisitorAudience } from "./audience";
+import { SHARED_MAX_LEVEL, sharedActivities } from "./sharing";
 import { dailySeries, routesByDay } from "./engine";
 import { AppError, NotFoundError, StravaAuthError } from "./errors";
 import {
@@ -44,21 +44,16 @@ export class CalendarBusyError extends AppError {
  * fetched from Strava once (1–10 API calls) and cached permanently, since a
  * finished year never changes.
  */
-export async function getCalendarYear(
-  slug: string,
-  year: number,
-  sessionAthleteId: number | null,
-  opts: { preview?: VisitorAudience } = {},
-): Promise<YearCalendar> {
-  const viewer = await resolveViewer(slug, sessionAthleteId, opts);
+export async function getCalendarYear(slug: string, year: number, sessionAthleteId: number | null): Promise<YearCalendar> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
   if (!viewer.isOwner && !viewer.settings.showCalendar) throw new NotFoundError("This athlete keeps their calendar private");
   const { athleteId } = viewer;
   const card = await getCachedCard(athleteId);
   if (!card || !calendarYears(card).includes(year)) throw new NotFoundError(`No ${year} calendar for this athlete`);
 
   const cached = await getYearCalendar(athleteId, year);
-  // Years cached before audiences existed have only the owner's series: rebuild rather than show it to visitors.
-  if (cached && (viewer.audience === "owner" || cached.audiences)) return forAudience(cached, viewer.audience);
+  // Years cached before the shared-only rule may include Only You activities: rebuild those.
+  if (cached?.shared) return cached;
 
   if (!(await acquireCalendarLock(athleteId, year))) throw new CalendarBusyError();
   try {
@@ -70,10 +65,11 @@ export async function getCalendarYear(
     const after = Date.UTC(year, 0, 1) / 1000 - 14 * 3600; // local dates can sit up to 14h either side of UTC
     const before = Date.UTC(year + 1, 0, 1) / 1000 + 14 * 3600;
     const activities = await fetchActivitiesBetween(tokens.accessToken, after, before);
-    const cal = yearCalendar(activities, year, new Date());
+    const shared = sharedActivities(activities);
+    const cal = yearCalendar(shared, year, new Date());
     await saveYearCalendar(athleteId, cal);
-    await saveRoutes(athleteId, year, routesByDay(activities));
-    return forAudience(cal, viewer.audience);
+    await saveRoutes(athleteId, year, routesByDay(shared));
+    return cal;
   } catch (err) {
     // Only the owner can fix a lost Strava connection; to visitors the year just isn't available.
     if (err instanceof StravaAuthError && !viewer.isOwner) throw new NotFoundError(`No ${year} calendar for this athlete`);
@@ -87,40 +83,22 @@ export async function getCalendarYear(
  * Route shapes for one local date. Looks in the rolling window first, then in
  * that year's bucket (present once the year has been opened in the calendar).
  */
-export async function getRoutesForDay(
-  slug: string,
-  date: string,
-  sessionAthleteId: number | null,
-  opts: { preview?: VisitorAudience } = {},
-): Promise<RouteShape[]> {
-  const viewer = await resolveViewer(slug, sessionAthleteId, opts);
+export async function getRoutesForDay(slug: string, date: string, sessionAthleteId: number | null): Promise<RouteShape[]> {
+  const viewer = await resolveViewer(slug, sessionAthleteId);
   if (!viewer.isOwner && !(viewer.settings.showCalendar && viewer.settings.showRoutes)) {
     throw new NotFoundError("This athlete keeps their routes private");
   }
   const { athleteId } = viewer;
   const recent = await getRoutes(athleteId, "recent");
   const routes = recent?.[date] ?? (await getRoutes(athleteId, Number(date.slice(0, 4))))?.[date] ?? [];
-  // Only routes of activities this audience could see on Strava (untagged = Only You).
-  return routes.filter((r) => visibleTo(r.level, viewer.audience));
+  // Only You routes aren't stored any more; the filter also covers buckets saved before that
+  // (untagged shapes count as Only You).
+  return routes.filter((r) => (r.level ?? 2) <= SHARED_MAX_LEVEL);
 }
 
-/** A finished year's daily series for the owner, plus one per visitor audience. */
+/** A finished year's daily series, from the (already shared-only) activities given. */
 export function yearCalendar(activities: StravaSummaryActivity[], year: number, fetchedAt: Date): YearCalendar {
   const days = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000;
   const endDate = `${year}-12-31`;
-  const series = (audience: Audience) => dailySeries(activitiesFor(activities, audience), endDate, days);
-  return {
-    year,
-    endDate,
-    ...series("owner"),
-    audiences: { link: series("link"), public: series("public") },
-    fetchedAt: fetchedAt.toISOString(),
-  };
-}
-
-/** The year as one audience sees it; other audiences' series are never sent. */
-function forAudience(cal: YearCalendar, audience: Audience): YearCalendar {
-  const { audiences, ...rest } = cal;
-  if (audience === "owner") return rest;
-  return { ...rest, ...audiences![audience] };
+  return { year, endDate, ...dailySeries(activities, endDate, days), shared: true, fetchedAt: fetchedAt.toISOString() };
 }

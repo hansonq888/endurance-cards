@@ -1,6 +1,5 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
-import { VISITOR_AUDIENCES, type VisitorAudience } from "./audience";
 import { env } from "./env";
 import type { CardSettings, PlayerCard, RoutesByDay, YearCalendar } from "@/types/player";
 import type { StoredTokens } from "@/types/strava";
@@ -11,8 +10,7 @@ import { decrypt, encrypt } from "./crypto";
  * README embeds never touch the Strava API.
  *
  * Keys (all prefixed `kudex:`):
- *   card:{athleteId}      owner's PlayerCard JSON   TTL 30d (freshness judged by card.scoutedAt)
- *   card:{id}:{audience}  visitor cards (link, public; lib/audience.ts)  TTL 30d
+ *   card:{athleteId}      PlayerCard JSON           TTL 30d (freshness judged by card.scoutedAt)
  *   meta:{athleteId}      every slug the athlete has had, for complete deletion  no TTL
  *   slug:{slug}           athleteId                 no TTL
  *   tokens:{athleteId}    AES-GCM encrypted tokens  no TTL
@@ -124,8 +122,8 @@ function store(): KVStore {
 
 const k = {
   card: (id: number) => `${PREFIX}card:${id}`,
-  /** Visitor versions of the card (lib/audience.ts); the owner's is `card`. */
-  cardView: (id: number, audience: VisitorAudience) => `${PREFIX}card:${id}:${audience}`,
+  /** Legacy per-visitor card copies (before one card per athlete); only ever deleted now. */
+  legacyCardView: (id: number, view: "link" | "public") => `${PREFIX}card:${id}:${view}`,
   /** Set by the webhook when an activity changes; forces the next view to re-scout. */
   dirty: (id: number) => `${PREFIX}dirty:${id}`,
   /** Debounce for webhook-triggered scouts. */
@@ -167,23 +165,6 @@ export async function saveCard(card: PlayerCard, previousSlug?: string): Promise
   if (previousSlug && previousSlug.toLowerCase() !== card.slug.toLowerCase()) {
     await s.del(k.slug(previousSlug));
   }
-}
-
-/** The card a visitor audience sees; null if it hasn't been built yet (e.g. cached before audiences existed). */
-export async function getCardView(athleteId: number, audience: VisitorAudience): Promise<PlayerCard | null> {
-  return store().get<PlayerCard>(k.cardView(athleteId, audience));
-}
-
-/** Saves every audience's card together, so visitors never see a mix of old and new. */
-export async function saveCardViews(cards: Record<"owner" | VisitorAudience, PlayerCard>, previousSlug?: string): Promise<void> {
-  const s = store();
-  await Promise.all(VISITOR_AUDIENCES.map((a) => s.set(k.cardView(cards.owner.athleteId, a), cards[a], { ex: CARD_TTL_SECONDS })));
-  // Owner card last: its presence (and freshness) is what the rest of the app keys off.
-  await saveCard(cards.owner, previousSlug);
-}
-
-export async function saveCardView(card: PlayerCard, audience: VisitorAudience): Promise<void> {
-  await store().set(k.cardView(card.athleteId, audience), card, { ex: CARD_TTL_SECONDS });
 }
 
 /** Webhook → "something changed on Strava; rebuild before trusting the cache". */
@@ -250,7 +231,8 @@ export async function deleteAthlete(athleteId: number, slugs: string[] = []): Pr
   const years = Array.from({ length: new Date().getUTCFullYear() + 1 - FIRST_STRAVA_YEAR + 1 }, (_, i) => FIRST_STRAVA_YEAR + i);
   const keys = [
     k.card(athleteId),
-    ...VISITOR_AUDIENCES.map((a) => k.cardView(athleteId, a)),
+    k.legacyCardView(athleteId, "link"),
+    k.legacyCardView(athleteId, "public"),
     k.dirty(athleteId),
     k.tokens(athleteId),
     k.settings(athleteId),
@@ -340,7 +322,10 @@ export async function getRoutes(athleteId: number, bucket: RouteBucket): Promise
 // ---------- Privacy settings ----------
 
 export async function getSettings(athleteId: number): Promise<CardSettings | null> {
-  return store().get<CardSettings>(k.settings(athleteId));
+  const settings = await store().get<CardSettings & { visibility: string }>(k.settings(athleteId));
+  // Cards saved as "public" before that option was removed are shared by link now.
+  if (settings && settings.visibility !== "private" && settings.visibility !== "unlisted") return { ...settings, visibility: "unlisted" };
+  return settings;
 }
 
 /** Saves settings and keeps the share-token slug pointing at the athlete (dropping a replaced token). */

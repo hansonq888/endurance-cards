@@ -13,7 +13,7 @@
  * benchmarks (a swimmer is compared with swimmers), then blended by the share
  * of time the athlete spends on each sport. No cross-sport conversion ratios.
  */
-import { activitiesFor, activityLevel, privacyMix, type Audience } from "./audience";
+import { activityLevel, privacyMix, sharedActivities } from "./sharing";
 import {
   INPUTS_SCHEMA,
   type AttributeKey,
@@ -676,23 +676,15 @@ export function buildCard(raw: RawScoutData, now = new Date()): PlayerCard {
   };
 }
 
-export type AudienceCards = Record<Audience, PlayerCard>;
-
 /**
- * One card per audience (lib/audience.ts), each built only from the activities
- * that audience may see on Strava, with its own rating history. The owner card
- * also records the privacy mix so the owner can see what visitors get.
- * Lifetime totals come from Strava's stats endpoint, which only counts
- * Everyone activities, so they're safe to share with every audience.
+ * The athlete's card: built only from activities they share on Strava
+ * (Everyone or Followers; lib/sharing.ts), with the rating history carried
+ * over. Everyone who can open it, the athlete included, sees this same card.
+ * The privacy mix (counts only) lets the athlete see what was left out.
  */
-export function buildAudienceCards(raw: RawScoutData, previous: Partial<AudienceCards>, now = new Date()): AudienceCards {
-  const build = (audience: Audience) =>
-    withHistory({ ...buildCard({ ...raw, activities: activitiesFor(raw.activities, audience) }, now), audience }, previous[audience] ?? null);
-  return {
-    owner: { ...build("owner"), privacy: privacyMix(raw.activities) },
-    link: build("link"),
-    public: build("public"),
-  };
+export function buildSharedCard(raw: RawScoutData, previous: PlayerCard | null, now = new Date()): PlayerCard {
+  const card = withHistory(buildCard({ ...raw, activities: sharedActivities(raw.activities) }, now), previous);
+  return { ...card, privacy: privacyMix(raw.activities) };
 }
 
 export const RATING_HISTORY_MAX = 26;

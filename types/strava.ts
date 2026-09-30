@@ -92,7 +92,7 @@ export interface StravaSummaryActivity {
   workout_type?: number | null;
   pr_count?: number;
   achievement_count?: number;
-  /** Who can see it on Strava. Decides which Kudex audiences may see it (lib/audience.ts). */
+  /** Who can see it on Strava. Only You activities never go on a card (lib/sharing.ts). */
   visibility?: "everyone" | "followers_only" | "only_me";
   /** Older "Only You" flag; still sent alongside `visibility`. */
   private?: boolean;

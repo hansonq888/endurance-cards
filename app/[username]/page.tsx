@@ -18,8 +18,6 @@ import { NotFoundError } from "@/lib/errors";
 import { getCardBySlug } from "@/lib/scout";
 import { isMeasured } from "@/lib/engine";
 import { ATTRIBUTE_KEYS } from "@/types/player";
-import { parsePreview } from "@/lib/access";
-import { visitorAudience } from "@/lib/audience";
 import { getSessionAthleteId } from "@/lib/session";
 import { publicOrigin } from "@/lib/url";
 
@@ -33,43 +31,34 @@ function safeDecode(s: string): string {
 }
 
 /** Loads the card as the current viewer sees it (visibility rules in lib/access.ts). */
-const loadCard = cache(async (slug: string, view?: string) => {
+const loadCard = cache(async (slug: string) => {
   try {
-    // ?view=public|link lets the owner preview a visitor's version; ignored for anyone else.
-    return await getCardBySlug(safeDecode(slug), await getSessionAthleteId(), { preview: parsePreview(view) });
+    return await getCardBySlug(safeDecode(slug), await getSessionAthleteId());
   } catch (err) {
     if (err instanceof NotFoundError) notFound();
     throw err;
   }
 });
 
-const viewParam = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
-
-/** What each visitor audience is called in the preview banner. */
-const AUDIENCE_LABEL = { public: "anyone", link: "people with your link" } as const;
-
-export async function generateMetadata({ params, searchParams }: PageProps<"/[username]">): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps<"/[username]">): Promise<Metadata> {
   const { username } = await params;
-  const { card, viewer } = await loadCard(username, viewParam((await searchParams).view));
+  const { card, viewer } = await loadCard(username);
   const title = `${card.name} — ${card.overall} ${TIER_THEMES[card.tier].label}`;
   const image = `/${encodeURIComponent(viewer.shareSlug)}.png`;
   return {
     title,
-    // Only public cards should show up in search engines.
-    robots: viewer.settings.visibility === "public" ? undefined : { index: false, follow: false },
+    // Cards are shared by private link: never index them.
+    robots: { index: false, follow: false },
     description: `${card.archetype} · ${card.position} · ${ATTRIBUTE_KEYS.map((k) => `${k} ${isMeasured(card.attributes[k]) ? card.attributes[k].value : "–"}`).join(" ")}`,
-    openGraph: { title, images: [{ url: image, width: 600, height: 840 }] },
+    openGraph: { title, images: [{ url: image, width: 688, height: 940 }] },
     twitter: { card: "summary_large_image", title, images: [image] },
   };
 }
 
-export default async function ProfilePage({ params, searchParams }: PageProps<"/[username]">) {
+export default async function ProfilePage({ params }: PageProps<"/[username]">) {
   const { username } = await params;
-  const view = viewParam((await searchParams).view);
-  const [{ card, stale, viewer }, origin] = await Promise.all([loadCard(username, view), publicOrigin()]);
-  const { settings, previewing, audience } = viewer;
-  // While previewing a visitor's view, the owner sees exactly what that visitor would: no owner tools.
-  const isOwner = viewer.isOwner && !previewing;
+  const [{ card, stale, viewer }, origin] = await Promise.all([loadCard(username), publicOrigin()]);
+  const { settings, isOwner } = viewer;
   // The slug this page was opened with: API calls from the page must use it (it may be the secret link).
   const viewSlug = safeDecode(username);
   const share = encodeURIComponent(viewer.shareSlug);
@@ -77,10 +66,6 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
   const imageUrl = `${origin}/${share}.png`;
   const isPrivate = settings.visibility === "private";
   const showCalendar = isOwner || settings.showCalendar;
-  // Images the owner saves or shares match what the people they share with will see.
-  const shareView = viewer.isOwner ? (previewing ? audience : visitorAudience(settings.visibility)) : null;
-  const shareQuery = shareView ? `?view=${shareView}` : "";
-  const ownerImageUrl = viewer.isOwner ? `${origin}/api/scout/${share}/card${shareQuery}` : imageUrl;
   const scouted = new Date(card.scoutedAt);
 
   return (
@@ -101,18 +86,6 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
           </a>
         </div>
       </nav>
-
-      {previewing && audience !== "owner" && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-strava/40 bg-strava/10 px-4 py-3 font-accent text-xs">
-          <span>
-            Previewing what <strong className="font-medium text-foreground">{AUDIENCE_LABEL[audience]}</strong> see: only activities
-            they could see on Strava.
-          </span>
-          <Link href={`/${viewSlug}`} className="uppercase tracking-wider text-strava hover:underline">
-            Exit preview
-          </Link>
-        </div>
-      )}
 
       {/* Card in the centre, supporting detail on either side (stacked below it on small screens). */}
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)_minmax(0,1fr)] lg:gap-6">
@@ -147,15 +120,15 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
               slug={card.slug}
               name={card.name}
               pageUrl={pageUrl}
-              imageUrl={ownerImageUrl}
-              storyUrl={`${origin}/api/scout/${share}/story${shareQuery}`}
+              imageUrl={imageUrl}
+              storyUrl={`${origin}/api/scout/${share}/story`}
               summary={`${card.overall} ${TIER_THEMES[card.tier].label} · ${card.archetype}`}
               downloadOnly={isPrivate}
             />
           </div>
           {isOwner && (
             <div className="relative mt-4 w-full max-w-[440px]">
-              <CardSettingsPanel slug={card.slug} settings={settings} origin={origin} privacy={card.privacy} pagePath={`/${viewSlug}`} />
+              <CardSettingsPanel slug={card.slug} settings={settings} origin={origin} privacy={card.privacy} />
             </div>
           )}
         </section>
@@ -178,7 +151,6 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
             years={calendarYears(card)}
             recent={{ ...card.inputs.daily, races: card.inputs.races }}
             routesEnabled={isOwner || settings.showRoutes}
-            view={previewing && audience !== "owner" ? audience : undefined}
           />
         </section>
       )}

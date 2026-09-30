@@ -2,7 +2,6 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { CardFan } from "@/components/CardFan";
-import { FindCard } from "@/components/FindCard";
 import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Marquee } from "@/components/home/Marquee";
@@ -26,7 +25,7 @@ function PrivacyNote({ className = "", style }: { className?: string; style?: CS
   return (
     <p className={`text-xs leading-relaxed text-muted ${className}`} style={style}>
       <ShieldCheck className="mr-1.5 inline h-4 w-4 -translate-y-px" aria-hidden />
-      Read-only. Visitors only see what they could already see on Strava.{" "}
+      Read-only. Only people you send your link to can see your card.{" "}
       <Link href="/privacy" className="whitespace-nowrap underline underline-offset-2 hover:text-foreground">
         How privacy works
       </Link>
@@ -127,17 +126,14 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <section className="mx-auto max-w-6xl px-4 pb-20">
         <div className="reveal grain relative overflow-hidden rounded-3xl border border-line p-8 sm:p-12">
           <TopoBackdrop seed={21} className="absolute -right-24 -top-24 h-[160%] w-auto opacity-70" />
-          <div className="relative grid grid-cols-1 items-end gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            <div>
-              <h2 className="display text-[2.4rem] leading-[0.9] tracking-tight sm:text-7xl">
-                Your card
-                <br />
-                <span className="text-strava">is waiting</span>
-              </h2>
-              <ConnectWithStrava className="mt-8" height={52} />
-              <PrivacyNote className="mt-4" />
-            </div>
-            <FindCard />
+          <div className="relative">
+            <h2 className="display text-[2.4rem] leading-[0.9] tracking-tight sm:text-7xl">
+              Your card
+              <br />
+              <span className="text-strava">is waiting</span>
+            </h2>
+            <ConnectWithStrava className="mt-8" height={52} />
+            <PrivacyNote className="mt-4" />
           </div>
         </div>
       </section>

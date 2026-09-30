@@ -5,7 +5,7 @@ import { saveSettings } from "@/lib/redis";
 import { getSessionAthleteId } from "@/lib/session";
 import type { CardSettings, Visibility } from "@/types/player";
 
-const VISIBILITIES: Visibility[] = ["public", "unlisted", "private"];
+const VISIBILITIES: Visibility[] = ["unlisted", "private"];
 
 /**
  * PATCH /api/scout/:username/settings  (owner only)
@@ -25,8 +25,6 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/scout/[use
       // Resetting the link invalidates every copy of the old one.
       shareToken: body.resetLink ? newShareToken() : current.shareToken,
     };
-    // Once they pick a visibility themselves, it's theirs: stop describing it as "set from Strava".
-    if (current.autoVisibility && body.visibility === undefined) next.autoVisibility = true;
     await saveSettings(athleteId, next, current.shareToken);
     return Response.json(next, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
